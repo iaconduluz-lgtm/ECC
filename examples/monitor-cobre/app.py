@@ -31,6 +31,27 @@ def secreto(clave, defecto=None):
         return defecto
 
 
+def revisar_secrets():
+    """Si existen Secrets pero tienen un error de formato, Streamlit no lee ninguno (ni la clave de acceso).
+    En ese caso se bloquea la app en vez de mostrarla sin protección."""
+    try:
+        list(st.secrets.keys())
+    except Exception as e:
+        texto = str(e)
+        if "No secrets found" in texto:
+            return  # no hay Secrets: uso local
+        detalle = texto.split(": ", 1)[-1] if "Error parsing secrets" in texto else type(e).__name__
+        st.title("Monitor de cobre")
+        st.error("**Los Secrets tienen un error de formato**, así que la app no puede leerlos (tampoco la clave de "
+                 f"acceso) y queda bloqueada por seguridad.\n\nDetalle: `{detalle}`\n\n"
+                 "Revisa en *Settings → Secrets*: que ninguna sección (lo que va entre `[ ]`) esté repetida, que los "
+                 "textos vayan entre comillas y que las listas usen corchetes, p. ej. `ventas = [5.8, 9, 9.2]`.")
+        st.stop()
+
+
+revisar_secrets()
+
+
 def pedir_clave():
     """Si hay `clave_acceso` en los secrets, pide la clave antes de mostrar nada."""
     esperada = secreto("clave_acceso")
@@ -100,6 +121,8 @@ def linea(df, titulo, unidad, color=AZUL):
 
 # ======================= Configuración y plan de inventario =======================
 cfg = configuracion.fusionar(configuracion.cargar(BASE), secreto("ajustes"))
+if secreto("plan_inventario") and not cfg.get("plan_inventario"):  # también se acepta sin el prefijo "ajustes."
+    cfg["plan_inventario"] = configuracion.fusionar({}, secreto("plan_inventario"))
 EN_LA_NUBE = secreto("ajustes") is not None or secreto("clave_acceso") is not None
 
 # El plan se edita en la pestaña Inventario; sus cambios se aplican aquí, antes de calcular nada.
@@ -148,8 +171,8 @@ with st.sidebar:
     emp = cfg["empresa"]
     if SITUACION:
         emp["inventario_toneladas"], emp["consumo_mensual_toneladas"] = SITUACION["inventario"], SITUACION["consumo_mensual"]
-    emp["inventario_toneladas"] = st.number_input("Inventario actual (t)", 0.0, value=float(emp["inventario_toneladas"]), step=1.0)
-    emp["consumo_mensual_toneladas"] = st.number_input("Consumo mensual (t)", 0.0, value=float(emp["consumo_mensual_toneladas"]), step=1.0)
+    emp["inventario_toneladas"] = st.number_input("Inventario actual (t)", 0.0, value=max(0.0, float(emp["inventario_toneladas"])), step=1.0)
+    emp["consumo_mensual_toneladas"] = st.number_input("Consumo mensual (t)", 0.0, value=max(0.0, float(emp["consumo_mensual_toneladas"])), step=1.0)
     if SITUACION:
         st.caption(f"Tomados de tu plan: inventario al iniciar {SITUACION['mes'].lower()} y consumo promedio de "
                    "este mes y los 2 siguientes. Puedes cambiarlos para simular.")
@@ -225,6 +248,11 @@ with t_inv:
                       pesos_m(pend[0]["costo_estimado_cop"]) if pend[0].get("costo_estimado_cop") else None,
                       delta_color="off", delta_arrow="off")
         criticos = ctx.get("meses_criticos") or []
+        negativos = [f for f in filas if f["final"] < 0]
+        if negativos:
+            st.error("**Te quedarías sin material:** el plan proyecta inventario negativo en "
+                     + ", ".join(f"**{f['mes']}** ({f['final']:g} t)" for f in negativos)
+                     + ". Revisa las compras o las ventas de esos meses.")
         if criticos:
             st.warning("Meses con inventario por debajo del mínimo de "
                        f"{minimo} días: " + ", ".join(f"**{f['mes']}** ({f['dias_inventario']} días)" for f in criticos))
@@ -566,6 +594,14 @@ with t_falta:
     ]
     for ok, titulo, como in pendientes:
         st.markdown(f"{'✅' if ok else '⬜'} **{titulo}**" + ("" if ok else f"  \n&nbsp;&nbsp;&nbsp;&nbsp;{como}"))
+    if EN_LA_NUBE or secreto("ajustes") is not None:
+        aj = secreto("ajustes") or {}
+        secciones = [("clave_acceso", secreto("clave_acceso") is not None),
+                     ("ANTHROPIC_API_KEY", secreto("ANTHROPIC_API_KEY") is not None),
+                     ("[ajustes.empresa]", "empresa" in aj), ("[ajustes.proveedores]", "proveedores" in aj),
+                     ("[ajustes.plan_inventario]", "plan_inventario" in aj or secreto("plan_inventario") is not None)]
+        st.markdown("**Secciones detectadas en tus Secrets** (solo los nombres, nunca los valores): "
+                    + " · ".join(f"{'✅' if ok else '⬜'} `{n}`" for n, ok in secciones))
     st.markdown("**Para decisiones aún mejores (opcional):** fecha y tamaño de tus próximos pedidos, si tus contratos "
                 "fijan precio (precio fijo o promedio LME del mes), plazo de pago en dólares, y si tienes coberturas "
                 "cambiarias con tu banco.")

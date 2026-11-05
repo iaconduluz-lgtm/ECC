@@ -58,6 +58,16 @@ class TestPlan(unittest.TestCase):
 
 @unittest.skipUnless(__import__("importlib").util.find_spec("streamlit"), "streamlit no instalado")
 class TestTableroInventario(unittest.TestCase):
+    def test_plan_negativo_no_rompe(self):
+        from streamlit.testing.v1 import AppTest
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with mock.patch.dict(os.environ, {"MONITOR_DEMO": "1"}):
+            at = AppTest.from_file(os.path.join(base, "app.py"), default_timeout=60)
+            at.secrets["plan_inventario"] = {"anio": date.today().year, "inventario_inicial": 10, "ventas": [5] * 12}
+            at.run()
+        self.assertEqual(len(at.exception), 0)
+        self.assertTrue(any("sin material" in e.value for e in at.error))
+
     def test_plan_desde_secrets(self):
         from streamlit.testing.v1 import AppTest
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

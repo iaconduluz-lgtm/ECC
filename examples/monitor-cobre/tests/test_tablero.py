@@ -74,6 +74,17 @@ class TestTablero(unittest.TestCase):
             self.assertTrue(nuevo.delta.startswith("+"))
             self.assertTrue(any("ANTHROPIC_API_KEY" in i.value for i in at.info))
 
+    def test_secrets_con_error_bloquean_la_app(self):
+        from streamlit.testing.v1 import AppTest
+        from streamlit.errors import StreamlitSecretNotFoundError
+        at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60)
+        error = StreamlitSecretNotFoundError("Error parsing secrets file at /x: Cannot declare ('ajustes', 'empresa') twice")
+        with mock.patch("streamlit.runtime.secrets.Secrets.keys", side_effect=error):
+            at.run()
+        self.assertEqual(len(at.metric), 0)  # no muestra datos
+        self.assertIn("error de formato", at.error[0].value)
+        self.assertIn("twice", at.error[0].value)
+
     def test_clave_de_acceso_bloquea_el_tablero(self):
         from streamlit.testing.v1 import AppTest
         at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60)
