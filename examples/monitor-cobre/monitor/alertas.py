@@ -36,6 +36,12 @@ def evaluar(ctx, cfg):
         out.append({"id": f"inv-{ctx['fecha']}", "nivel": "URGENTE",
                     "texto": f"Inventario alcanza para {cob} días (mínimo {cfg['empresa']['cobertura_minima_dias']}). Reponer."})
 
+    for f in ctx.get("meses_criticos") or []:
+        out.append({"id": f"plan-{f['mes']}-{ctx['fecha']}", "nivel": "ATENCION",
+                    "texto": f"Según tu plan, en {f['mes']} el inventario cierra en {f['final']:g} t: cubre solo "
+                             f"{f['dias_inventario']} días (mínimo {cfg['empresa']['cobertura_minima_dias']}). "
+                             "Adelanta o aumenta la compra."})
+
     for n in ctx.get("noticias", []):
         # Alto/Peligro siempre; si menciona a tu proveedor directo, desde Medio.
         minimo = 4 if n.get("afecta_proveedor") else a["noticia_riesgo_minimo"]

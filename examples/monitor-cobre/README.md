@@ -28,6 +28,7 @@ El tablero tiene estas pestañas:
 | Pestaña | Qué muestra |
 |---|---|
 | Resumen | TRM, cobre, proveedor más barato, inventario, alertas y costo por proveedor |
+| Inventario | Plan mensual (inicial, compras, ventas, final, días de inventario), meses bajo el mínimo y costo de las compras pendientes |
 | Gráficos | Cobre, TRM y costo puesto en planta de hasta 5 años; filtro por periodo o por meses; promedio mensual descargable |
 | Escenarios | Cuánto cambia tu gasto mensual si sube el cobre o la TRM, simulador y mapa de escenarios |
 | Noticias e IA | Noticias agrupadas por tema con su posible impacto y, con clave de IA, un análisis con recomendación |

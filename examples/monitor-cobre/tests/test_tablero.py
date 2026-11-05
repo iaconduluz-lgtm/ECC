@@ -62,7 +62,7 @@ class TestTablero(unittest.TestCase):
         with mock.patch.dict(os.environ, {"MONITOR_DEMO": "1"}, clear=False):
             os.environ.pop("ANTHROPIC_API_KEY", None)
             at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60).run()
-            self.assertEqual([t.label for t in at.tabs][:3], ["📊 Resumen", "📈 Gráficos", "🧮 Escenarios"])
+            self.assertEqual([t.label for t in at.tabs][:3], ["📊 Resumen", "📦 Inventario", "📈 Gráficos"])
             periodo = next(r for r in at.radio if r.label == "Periodo")
             for opcion in ("3 meses", "5 años", "Elegir meses"):
                 periodo.set_value(opcion).run()

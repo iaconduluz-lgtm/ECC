@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from monitor import __main__ as motor
-from monitor import analisis, configuracion, costos, demo, ia
+from monitor import analisis, configuracion, costos, demo, ia, inventario
 from monitor.noticias import ICONO
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -70,6 +70,10 @@ def millones(x):
     return f"{signo}${abs(x) / 1e6:,.1f} M"
 
 
+def pesos_m(x):
+    return "s/d" if x is None else f"${x / 1e6:,.1f} M"
+
+
 def a_df(serie):
     df = pd.DataFrame(serie, columns=["Fecha", "Valor"])
     df["Fecha"] = pd.to_datetime(df["Fecha"])
@@ -94,9 +98,45 @@ def linea(df, titulo, unidad, color=AZUL):
     return (base.mark_line(color=color, strokeWidth=2) + regla + puntos).properties(title=titulo, height=280)
 
 
-# ======================= Barra lateral =======================
+# ======================= Configuración y plan de inventario =======================
 cfg = configuracion.fusionar(configuracion.cargar(BASE), secreto("ajustes"))
 EN_LA_NUBE = secreto("ajustes") is not None or secreto("clave_acceso") is not None
+
+# El plan se edita en la pestaña Inventario; sus cambios se aplican aquí, antes de calcular nada.
+PLAN_ORIGINAL = configuracion.fusionar({}, cfg.get("plan_inventario") or {})
+TIENE_PLAN = bool(PLAN_ORIGINAL)
+plan = dict(PLAN_ORIGINAL) if TIENE_PLAN else {"anio": datetime.now().year, "inventario_inicial": 0}
+
+
+def plan_a_df(p):
+    reales = list(p.get("cierres_reales") or [])
+    df = pd.DataFrame({c: [f[c] for f in inventario.proyectar(p)] for c in inventario.CAMPOS}, index=inventario.MESES)
+    df["cierre_real"] = [float(reales[i]) if i < len(reales) else None for i in range(12)]
+    return df
+
+
+TABLA_PLAN = plan_a_df(plan)
+edicion = st.session_state.get("editor_plan", {}).get("edited_rows", {})
+inicial_editado = st.session_state.get("inv_inicial")
+if edicion or (inicial_editado is not None and inicial_editado != float(plan.get("inventario_inicial") or 0)):
+    df_plan = TABLA_PLAN.copy()
+    for fila, cambios in edicion.items():
+        for k, v in cambios.items():
+            df_plan.iloc[int(fila), df_plan.columns.get_loc(k)] = v
+    plan.update({c: [float(x) if pd.notna(x) else 0.0 for x in df_plan[c]] for c in inventario.CAMPOS})
+    reales = []
+    for v in df_plan["cierre_real"]:
+        if v is None or pd.isna(v):
+            break
+        reales.append(float(v))
+    plan["cierres_reales"] = reales
+    if inicial_editado is not None:
+        plan["inventario_inicial"] = inicial_editado
+    TIENE_PLAN = True
+cfg["plan_inventario"] = plan if TIENE_PLAN else None
+SITUACION = inventario.situacion_actual(plan) if TIENE_PLAN else None
+
+# ======================= Barra lateral =======================
 with st.sidebar:
     st.header("Controles")
     modo_demo = st.toggle("Modo demostración (datos ficticios)", value=os.environ.get("MONITOR_DEMO") == "1",
@@ -106,8 +146,13 @@ with st.sidebar:
 
     st.subheader("Tu empresa")
     emp = cfg["empresa"]
-    emp["inventario_toneladas"] = st.number_input("Inventario actual (t)", 0.0, value=float(emp["inventario_toneladas"]), step=5.0)
-    emp["consumo_mensual_toneladas"] = st.number_input("Consumo mensual (t)", 0.0, value=float(emp["consumo_mensual_toneladas"]), step=5.0)
+    if SITUACION:
+        emp["inventario_toneladas"], emp["consumo_mensual_toneladas"] = SITUACION["inventario"], SITUACION["consumo_mensual"]
+    emp["inventario_toneladas"] = st.number_input("Inventario actual (t)", 0.0, value=float(emp["inventario_toneladas"]), step=1.0)
+    emp["consumo_mensual_toneladas"] = st.number_input("Consumo mensual (t)", 0.0, value=float(emp["consumo_mensual_toneladas"]), step=1.0)
+    if SITUACION:
+        st.caption(f"Tomados de tu plan: inventario al iniciar {SITUACION['mes'].lower()} y consumo promedio de "
+                   "este mes y los 2 siguientes. Puedes cambiarlos para simular.")
     claves = list(cfg["proveedores"])
     emp["proveedor_actual"] = st.selectbox("Proveedor actual", claves, index=claves.index(emp["proveedor_actual"]),
                                            format_func=lambda k: cfg["proveedores"][k]["nombre"])
@@ -155,8 +200,86 @@ TONO[rec["tono"]](f"### Recomendación: {rec['accion']}\n" + "\n".join(f"- {r}" 
 st.caption("Recomendación automática por reglas (precio vs. promedios, TRM, noticias e inventario). "
            "Es un apoyo para decidir, no asesoría financiera.")
 
-t_res, t_graf, t_esc, t_not, t_falta, t_aj = st.tabs(
-    ["📊 Resumen", "📈 Gráficos", "🧮 Escenarios", "📰 Noticias e IA", "✅ Qué falta", "✏️ Ajustes"])
+t_res, t_inv, t_graf, t_esc, t_not, t_falta, t_aj = st.tabs(
+    ["📊 Resumen", "📦 Inventario", "📈 Gráficos", "🧮 Escenarios", "📰 Noticias e IA", "✅ Qué falta", "✏️ Ajustes"])
+
+# ======================= Inventario =======================
+with t_inv:
+    minimo = emp["cobertura_minima_dias"]
+    if not TIENE_PLAN:
+        st.info("Todavía no hay plan de inventario. Llena la tabla de abajo (toneladas por mes) y copia el texto "
+                "que aparece al final en *Settings → Secrets* para que quede guardado.")
+    else:
+        filas = ctx.get("plan") or []
+        sit = ctx.get("situacion_plan")
+        pend = ctx.get("compras_pendientes") or []
+        i1, i2, i3, i4 = st.columns(4)
+        if sit:
+            i1.metric(f"Inventario al iniciar {sit['mes'].lower()}", f"{sit['inventario']:g} t")
+            i2.metric("Consumo promedio próximo", f"{sit['consumo_mensual']:g} t/mes")
+        i3.metric("Cierre de diciembre (proyectado)", f"{filas[-1]['final']:g} t",
+                  f"{filas[-1]['dias_inventario']} días" if filas[-1]["dias_inventario"] is not None else None,
+                  delta_color="off", delta_arrow="off")
+        if pend:
+            i4.metric(f"Próxima compra ({pend[0]['mes'].lower()})", f"{pend[0]['toneladas']:g} t",
+                      pesos_m(pend[0]["costo_estimado_cop"]) if pend[0].get("costo_estimado_cop") else None,
+                      delta_color="off", delta_arrow="off")
+        criticos = ctx.get("meses_criticos") or []
+        if criticos:
+            st.warning("Meses con inventario por debajo del mínimo de "
+                       f"{minimo} días: " + ", ".join(f"**{f['mes']}** ({f['dias_inventario']} días)" for f in criticos))
+        else:
+            st.success(f"De aquí a diciembre ningún mes baja del mínimo de {minimo} días de inventario.")
+
+        dfp = pd.DataFrame(filas)
+        base_i = alt.Chart(dfp).encode(
+            x=alt.X("mes:N", sort=inventario.MESES, title=None, axis=alt.Axis(labelAngle=0, labelExpr="slice(datum.label, 0, 3)")),
+            tooltip=[alt.Tooltip("mes:N", title="Mes"), alt.Tooltip("tipo:N", title="Dato"),
+                     alt.Tooltip("final:Q", title="Inventario final (t)", format=",.1f"),
+                     alt.Tooltip("dias_inventario:Q", title="Días de inventario"),
+                     alt.Tooltip("compras_importacion:Q", title="Importación (t)"), alt.Tooltip("ventas:Q", title="Ventas (t)")])
+        barras_i = base_i.mark_bar(cornerRadiusEnd=4, size=26).encode(
+            y=alt.Y("dias_inventario:Q", title="Días de inventario al cierre del mes", axis=alt.Axis(gridOpacity=0.3)),
+            color=alt.Color("tipo:N", scale=alt.Scale(domain=["Real", "Proyectado"], range=[AZUL, "#eb6834"]),
+                            legend=alt.Legend(title=None, orient="top")))
+        regla_i = alt.Chart(pd.DataFrame({"y": [minimo]})).mark_rule(color=TINTA2, strokeDash=[4, 4]).encode(y="y:Q")
+        st.altair_chart((barras_i + regla_i).properties(height=300), width="stretch")
+        st.caption(f"Línea punteada: mínimo de {minimo} días de inventario.")
+
+        tabla = dfp.rename(columns={"mes": "Mes", "tipo": "Dato", "inicial": "Inicial", "compras_importacion": "Importación",
+                                    "compra_nacional": "Nacional", "producto_terminado": "PT", "ventas": "Ventas",
+                                    "ajuste": "Ajuste", "final": "Final", "meses_inventario": "Meses inv.",
+                                    "dias_inventario": "Días inv.", "diferencia": "Dif. vs cálculo"})
+        st.dataframe(tabla[["Mes", "Dato", "Inicial", "Importación", "Nacional", "PT", "Ventas", "Ajuste", "Final",
+                            "Meses inv.", "Días inv.", "Dif. vs cálculo"]], hide_index=True, width="stretch")
+        st.caption("Final = inicial + importación + nacional + PT − ventas + ajuste. En los meses *Real* se usa tu cierre "
+                   "real; *Dif. vs cálculo* muestra cuánto difiere de la fórmula (útil para encontrar errores en la hoja).")
+
+        if pend:
+            st.subheader("Compras pendientes y su riesgo de precio")
+            dpend = pd.DataFrame(pend)
+            for c, fn in (("costo_estimado_cop", pesos_m), ("si_cobre_sube_5pct", millones), ("si_trm_sube_5pct", millones)):
+                if c in dpend:
+                    dpend[c] = dpend[c].map(fn)
+            st.dataframe(dpend.rename(columns={"mes": "Mes", "toneladas": "Toneladas", "costo_estimado_cop": "Costo estimado",
+                                               "si_cobre_sube_5pct": "Si el cobre sube 5 %", "si_trm_sube_5pct": "Si la TRM sube 5 %"}),
+                         hide_index=True, width="stretch")
+            st.caption(f"Costo con el precio de hoy y el proveedor {prov_actual['nombre']} (primas y fletes de *Ajustes*).")
+
+    with st.expander("✏️ Editar el plan de inventario", expanded=not TIENE_PLAN):
+        st.number_input("Inventario inicial de enero (t)", 0.0, value=float(PLAN_ORIGINAL.get("inventario_inicial") or 0),
+                        step=0.1, key="inv_inicial")
+        st.data_editor(TABLA_PLAN, key="editor_plan", width="stretch", column_config={
+            "compras_importacion": st.column_config.NumberColumn("Compras importación (t)", format="%.2f"),
+            "compra_nacional": st.column_config.NumberColumn("Compra nacional (t)", format="%.2f"),
+            "producto_terminado": st.column_config.NumberColumn("PT (t)", format="%.3f"),
+            "ventas": st.column_config.NumberColumn("Ventas (t)", format="%.2f"),
+            "ajuste": st.column_config.NumberColumn("Ajuste (t)", format="%.2f"),
+            "cierre_real": st.column_config.NumberColumn("Cierre real (t)", format="%.2f",
+                                                         help="Solo meses ya cerrados, en orden desde enero. Vacío = proyectar.")})
+        st.caption("Los cambios se ven al instante en todo el tablero. Para guardarlos de forma permanente, copia este "
+                   "texto en *Settings → Secrets* de Streamlit (reemplaza la sección `[ajustes.plan_inventario]` si ya existe):")
+        st.code(inventario.a_toml(plan), language="toml")
 
 # ======================= Resumen =======================
 with t_res:
@@ -431,6 +554,8 @@ with t_falta:
     pendientes = [
         (costos_reales, "Tus primas, fletes y seguros reales por proveedor",
          "Pídelos a tus proveedores o a tu agente de carga, en USD por tonelada, y ponlos en Secrets → `[ajustes.proveedores.*]`."),
+        (TIENE_PLAN, "Plan de inventario mensual",
+         "Llénalo en la pestaña **Inventario** y copia el texto que genera en Secrets."),
         (costos_reales, "Inventario y consumo mensual reales", "En Secrets → `[ajustes.empresa]` (o en la barra lateral para simular)."),
         (bool(ctx.get("cobre_usd_t")), "Precio del cobre llegando", "Si ninguna fuente responde, escribe el precio LME del día en la barra lateral."),
         (bool(manual), "Precio LME oficial de tu broker o proveedor (opcional, el más exacto)",
@@ -456,7 +581,8 @@ with t_aj:
         st.caption("Versión en internet: los cambios sirven para simular. Para dejarlos fijos, cámbialos en "
                    "*Settings → Secrets* de Streamlit Cloud (sección `[ajustes]`).")
     elif st.button("💾 Guardar mis valores"):
-        configuracion.guardar_ajustes(BASE, {"empresa": emp, "cobre": cfg["cobre"], "proveedores": cfg["proveedores"]})
+        configuracion.guardar_ajustes(BASE, {"empresa": emp, "cobre": cfg["cobre"], "proveedores": cfg["proveedores"],
+                                             **({"plan_inventario": plan} if TIENE_PLAN else {})})
         st.success("Guardado en data/ajustes.yaml. Las alertas automáticas usarán estos valores.")
 
 # ======================= Pie =======================

@@ -158,6 +158,12 @@ def recomendacion(ctx, cfg):
     if cob is not None and cob < minimo:
         return {"accion": "Comprar ya lo necesario", "tono": "urgente", "diversificar": bool(riesgo_peru),
                 "razones": [f"El inventario solo alcanza para {cob:.0f} días (mínimo {minimo})."] + razones}
+    criticos = ctx.get("meses_criticos") or []
+    if criticos:
+        puntos += 1
+        f = criticos[0]
+        razones.append(f"Según tu plan, en {f['mes']} el inventario cubre solo {f['dias_inventario']} días: "
+                       "conviene adelantar o aumentar la compra.")
     if cob is not None and cob > minimo * 3:
         puntos -= 1
         razones.append(f"Tienes inventario para {cob:.0f} días: no hay prisa por comprar.")

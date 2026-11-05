@@ -5,7 +5,7 @@ import sys
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from . import alertas, analisis, cobre, configuracion, costos, estado, noticias, reporte, trm
+from . import alertas, analisis, cobre, configuracion, costos, estado, inventario, noticias, reporte, trm
 
 
 def descargar(cfg):
@@ -52,10 +52,18 @@ def calcular(datos, cfg):
     if ctx.get("trm") and ctx.get("cobre_usd_t"):
         ctx["ranking"] = costos.comparar(ctx["cobre_usd_t"], ctx["trm"], cfg["proveedores"])
     emp = cfg["empresa"]
+    plan = cfg.get("plan_inventario")
+    if plan:
+        ctx["plan"] = inventario.proyectar(plan)
+        ctx["situacion_plan"] = inventario.situacion_actual(plan)
+        ctx["meses_criticos"] = inventario.meses_criticos(plan, emp["cobertura_minima_dias"])
     ctx["cobertura_dias"] = costos.cobertura_dias(emp.get("inventario_toneladas", 0), emp.get("consumo_mensual_toneladas"))
     if ctx.get("ranking"):
         prov = cfg["proveedores"][emp["proveedor_actual"]]
         ctx["sensibilidad"] = analisis.sensibilidad(ctx["cobre_usd_t"], ctx["trm"], prov, emp.get("consumo_mensual_toneladas"))
+        if plan:
+            costo_t = costos.costo_proveedor(ctx["cobre_usd_t"], ctx["trm"], prov)["cop_t"]
+            ctx["compras_pendientes"] = inventario.compras_pendientes(plan, costo_t, ctx["sensibilidad"])
     ctx["recomendacion"] = analisis.recomendacion(ctx, cfg)
     return ctx, alertas.evaluar(ctx, cfg), errores
 

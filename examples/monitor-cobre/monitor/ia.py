@@ -91,6 +91,10 @@ def _datos(ctx, cfg, sens, recomendacion_reglas):
         "costo_por_proveedor": [{k: r[k] for k in ("nombre", "usd_t", "cop_t", "dias_transito")}
                                 for r in ctx.get("ranking") or []],
         "inventario_dias": ctx.get("cobertura_dias"),
+        "plan_inventario_proximos_meses": [
+            {k: f[k] for k in ("mes", "tipo", "compras_importacion", "ventas", "final", "dias_inventario")}
+            for f in (ctx.get("plan") or [])[(ctx.get("situacion_plan") or {}).get("fila", {}).get("numero", 13) - 1:]],
+        "compras_pendientes": ctx.get("compras_pendientes"),
         "consumo_mensual_t": cfg["empresa"].get("consumo_mensual_toneladas"),
         "impacto_gasto_mensual_cop": {
             "por_cada_1pct_que_sube_cobre": sens.get("cobre_1pct_mes") if sens else None,
