@@ -23,6 +23,28 @@ El tablero muestra en una sola pantalla la TRM, el cobre, el costo por proveedor
 La primera vez instala lo necesario (solo hace falta tener [Python](https://www.python.org/downloads/) instalado).
 Después se abre en el navegador, en `http://localhost:8501`.
 
+El tablero tiene estas pestañas:
+
+| Pestaña | Qué muestra |
+|---|---|
+| Resumen | TRM, cobre, proveedor más barato, inventario, alertas y costo por proveedor |
+| Gráficos | Cobre, TRM y costo puesto en planta de hasta 5 años; filtro por periodo o por meses; promedio mensual descargable |
+| Escenarios | Cuánto cambia tu gasto mensual si sube el cobre o la TRM, simulador y mapa de escenarios |
+| Noticias e IA | Noticias agrupadas por tema con su posible impacto y, con clave de IA, un análisis con recomendación |
+| Qué falta | Lista de datos pendientes para que los cálculos sean precisos |
+| Ajustes | Primas, fletes, seguros y aranceles por proveedor |
+
+Arriba de las pestañas aparece una **recomendación** (comprar más, lo normal o esperar) con sus razones:
+precio frente a sus promedios de 3 meses y su rango del último año, TRM, noticias de riesgo e inventario.
+Es una regla transparente de apoyo, no asesoría financiera.
+
+### Análisis con IA (opcional)
+
+Con una clave de Anthropic (`ANTHROPIC_API_KEY` en los secrets) el botón *Analizar noticias e impacto con IA*
+envía los titulares y tus números a Claude y devuelve: presión sobre el precio, riesgo de suministro desde Perú,
+qué pasa si sube el cobre o la TRM, recomendación y acciones para la semana. Solo se ejecuta al pulsar el botón
+(unos pocos centavos de dólar por análisis). Si el modelo principal no puede responder, otro modelo lo intenta.
+
 En el tablero puedes:
 
 - cambiar inventario, consumo y proveedor actual en la barra lateral;

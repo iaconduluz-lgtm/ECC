@@ -29,7 +29,8 @@ El repositorio `iaconduluz-lgtm/ECC` es **público**. Por eso:
    - **Python version:** 3.12.
    - **Secrets:** copia el contenido de `.streamlit/secrets.toml.example`, pégalo y cambia:
      - `clave_acceso` por una clave larga (por ejemplo, cuatro palabras al azar);
-     - las primas, fletes, inventario y consumo por tus valores reales.
+     - las primas, fletes, inventario y consumo por tus valores reales;
+     - opcional: `ANTHROPIC_API_KEY` para el análisis de noticias con IA (o borra esa línea).
 5. Pulsa **Deploy**. La primera vez tarda 2 o 3 minutos en instalar.
 6. Abre el enlace, escribe la clave y listo. Compártelo con tu equipo junto con la clave.
 

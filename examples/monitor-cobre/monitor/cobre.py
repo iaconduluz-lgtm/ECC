@@ -15,6 +15,7 @@ from datetime import date, datetime, timezone
 from . import red
 
 LB_POR_TONELADA = 2204.62
+MAX_DIAS = 1900  # ~5 años de días hábiles con margen
 RANGO_USD_T = (3000, 30000)  # fuera de esto se considera un dato mal leído
 YAHOO = ["https://query1.finance.yahoo.com/v8/finance/chart/HG=F",
          "https://query2.finance.yahoo.com/v8/finance/chart/HG=F"]
@@ -65,7 +66,7 @@ def parse_stooq(texto):
         except (KeyError, ValueError):
             continue
     serie.sort(key=lambda x: x[0], reverse=True)
-    serie = serie[:30]
+    serie = serie[:MAX_DIAS]
     if not serie or not _valido(serie[0][1]):
         raise ValueError("sin precios válidos")
     return serie[0][1], serie
@@ -115,7 +116,7 @@ def parse_westmetall(html):
             continue
         if fecha and _valido(valor):
             serie.append((fecha, round(valor, 2)))
-    serie = sorted(set(serie), key=lambda x: x[0], reverse=True)[:30]
+    serie = sorted(set(serie), key=lambda x: x[0], reverse=True)[:MAX_DIAS]
     if not serie:
         raise ValueError("no se encontró la tabla de precios")
     return serie[0][1], serie
@@ -125,7 +126,7 @@ def _yahoo():
     ultimo = None
     for url in YAHOO:
         try:
-            return parse(red.get(url, params={"interval": "1d", "range": "1mo"}, headers=NAVEGADOR).json())
+            return parse(red.get(url, params={"interval": "1d", "range": "5y"}, headers=NAVEGADOR).json())
         except Exception as e:
             ultimo = e
     raise ultimo

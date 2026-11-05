@@ -116,6 +116,9 @@ class TestNoticias(unittest.TestCase):
         self.assertEqual(noticias.puntaje("Comparo precios de autos")[0], 0)
         self.assertEqual(noticias.puntaje("Paro de transportistas en Lima")[0], 0)  # no es de cobre
         self.assertEqual(noticias.puntaje("Los futuros del cobre se consolidan")[0], 1)  # tema sí, riesgo no
+        self.assertLess(noticias.puntaje("Las Bambas reanuda envíos de cobre tras acuerdo")[0],
+                        noticias.puntaje("Las Bambas suspende envíos de cobre por bloqueo")[0])
+        self.assertGreaterEqual(noticias.puntaje("Perú aprueba impuesto a las exportaciones de cobre")[0], 4)
 
     def test_filtrar_deduplica_y_descarta_irrelevantes(self):
         items = noticias.parse_rss(RSS)

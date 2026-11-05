@@ -1,5 +1,5 @@
 """TRM oficial de Colombia desde datos.gov.co (dataset 32sa-8pi3, Superfinanciera)."""
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from . import red
 
@@ -19,8 +19,10 @@ def parse(rows):
     return out
 
 
-def obtener(dias=30):
-    params = {"$order": "vigenciadesde DESC", "$limit": dias}
+def obtener(anios=5):
+    """Histórico diario de los últimos `anios` años (más reciente primero)."""
+    desde = (date.today() - timedelta(days=365 * anios)).isoformat()
+    params = {"$where": f"vigenciadesde >= '{desde}T00:00:00'", "$order": "vigenciadesde DESC", "$limit": 5000}
     serie = parse(red.get(URL, params=params).json())
     if not serie:
         raise RuntimeError("datos.gov.co no devolvió valores de TRM")

@@ -14,16 +14,16 @@ NOTICIAS_DEMO = [
 ]
 
 
-def _trm(dias=30):
+def _trm(dias=1825):
     hoy = datetime.now(timezone.utc).date()
-    return [{"valor": f"{4150 + 60 * math.sin(i / 4) + i * 2:.2f}", "unidad": "COP",
+    return [{"valor": f"{4000 + 250 * math.sin(i / 90) + 60 * math.sin(i / 7) - i * 0.2:.2f}", "unidad": "COP",
              "vigenciadesde": (hoy - timedelta(days=i)).isoformat() + "T00:00:00.000"} for i in range(dias)]
 
 
-def _cobre(dias=30):
+def _cobre(dias=1260):
     base = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     tiempos = [int((base - timedelta(days=dias - 1 - i)).timestamp()) for i in range(dias)]
-    cierres = [4.85 - 0.25 * (i / dias) + 0.06 * math.sin(i / 2) for i in range(dias)]
+    cierres = [3.8 + 1.0 * (i / dias) + 0.35 * math.sin(i / 60) + 0.06 * math.sin(i / 3) for i in range(dias)]
     return {"chart": {"result": [{"meta": {"regularMarketPrice": cierres[-1]}, "timestamp": tiempos,
                                   "indicators": {"quote": [{"close": cierres}]}}]}}
 

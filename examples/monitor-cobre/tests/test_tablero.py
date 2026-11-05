@@ -41,8 +41,8 @@ class TestDemo(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, demo.activar():
             ctx, todas, _, errores, _ = app.ejecutar(configuracion.cargar(BASE), tmp, enviar=False, guardar=False)
             self.assertEqual(errores, [])
-            self.assertEqual(len(ctx["serie_trm"]), 30)
-            self.assertGreater(len(ctx["serie_cobre"]), 20)
+            self.assertGreater(len(ctx["serie_trm"]), 1500)
+            self.assertGreater(len(ctx["serie_cobre"]), 1000)
             self.assertTrue(any(a["nivel"] == "RIESGO SUMINISTRO" for a in todas))
             self.assertEqual(os.listdir(tmp), [])
 
@@ -55,7 +55,24 @@ class TestTablero(unittest.TestCase):
             at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60).run()
         self.assertEqual(len(at.exception), 0)
         self.assertEqual(at.title[0].value, "Monitor de cobre")
-        self.assertEqual(len(at.metric), 4)
+        self.assertEqual(len(at.metric), 9)
+
+    def test_pestanas_y_simulador(self):
+        from streamlit.testing.v1 import AppTest
+        with mock.patch.dict(os.environ, {"MONITOR_DEMO": "1"}, clear=False):
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+            at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60).run()
+            self.assertEqual([t.label for t in at.tabs][:3], ["📊 Resumen", "📈 Gráficos", "🧮 Escenarios"])
+            periodo = next(r for r in at.radio if r.label == "Periodo")
+            for opcion in ("3 meses", "5 años", "Elegir meses"):
+                periodo.set_value(opcion).run()
+                self.assertEqual(len(at.exception), 0, opcion)
+            next(r for r in at.radio if r.label == "Ver").set_value("Promedio mensual").run()
+            self.assertEqual(len(at.exception), 0)
+            at.slider[0].set_value(10).run()
+            nuevo = next(m for m in at.metric if m.label == "Nuevo costo por tonelada")
+            self.assertTrue(nuevo.delta.startswith("+"))
+            self.assertTrue(any("ANTHROPIC_API_KEY" in i.value for i in at.info))
 
     def test_clave_de_acceso_bloquea_el_tablero(self):
         from streamlit.testing.v1 import AppTest
@@ -68,7 +85,7 @@ class TestTablero(unittest.TestCase):
         self.assertEqual(at.error[0].value, "Clave incorrecta.")
         with mock.patch.dict(os.environ, {"MONITOR_DEMO": "1"}):
             at.text_input[0].input("secreta").run()
-        self.assertEqual(len(at.metric), 4)
+        self.assertEqual(len(at.metric), 9)
 
 
 if __name__ == "__main__":

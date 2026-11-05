@@ -20,6 +20,9 @@ EVENTOS = {
     "impuesto": 1, "regalias": 1, "sanciones": 2, "inventarios": 1, "deficit": 2,
     "escasez": 3, "shortage": 3, "disruption": 3, "interrupcion": 3, "outage": 3, "landslide": 3,
     "deslizamiento": 3, "huaico": 3, "export ban": 4, "prohibe": 2, "aranceles": 2, "tariffs": 2,
+    "impuesto a las exportaciones": 3, "export tax": 3,
+    # señales que bajan el riesgo (buenas noticias para el suministro)
+    "record": -2, "reanuda": -3, "resume": -3, "acuerdo": -2, "levantan": -2, "levanta el": -2, "agreement": -2,
 }
 ACTIVOS = {
     "las bambas": 3, "antamina": 3, "cerro verde": 3, "quellaveco": 3, "toquepala": 2,
