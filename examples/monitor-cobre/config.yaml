@@ -2,7 +2,7 @@
 # Los valores marcados AJUSTAR son estimados: reemplázalos con tus cotizaciones reales.
 
 apariencia:
-  tema: cobre   # cobre | noche | corporativo | minimal
+  tema: noche   # cobre | noche | corporativo | minimal
 
 empresa:
   proveedor_actual: peru          # clave de la lista de proveedores de abajo

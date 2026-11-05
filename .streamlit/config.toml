@@ -1,0 +1,7 @@
+# Colores base de Streamlit para el diseño "Noche industrial" (el resto del estilo está en monitor/temas.py).
+[theme]
+base = "dark"
+primaryColor = "#E8833A"
+backgroundColor = "#0F1419"
+secondaryBackgroundColor = "#1A2129"
+textColor = "#E8E2D9"
