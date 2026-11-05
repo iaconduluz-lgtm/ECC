@@ -12,6 +12,25 @@ Cada hora revisa:
 Con eso calcula el **costo puesto en planta en COP/t por proveedor**, lo compara y envía alertas
 por Telegram y/o correo.
 
+## Abrir el programa (tablero)
+
+El tablero muestra en una sola pantalla la TRM, el cobre, el costo por proveedor, qué hacer hoy y las noticias de riesgo.
+
+- **Windows:** doble clic en `iniciar.bat`.
+- **Mac:** doble clic en `iniciar.command` (la primera vez: clic derecho, *Abrir*).
+- **Linux o terminal:** `pip install -r requirements.txt` y luego `streamlit run app.py`.
+
+La primera vez instala lo necesario (solo hace falta tener [Python](https://www.python.org/downloads/) instalado).
+Después se abre en el navegador, en `http://localhost:8501`.
+
+En el tablero puedes:
+
+- cambiar inventario, consumo y proveedor actual en la barra lateral;
+- escribir el precio LME oficial si tu broker te lo da;
+- ajustar primas, fletes y aranceles en *Ajustar costos por proveedor* y guardarlos
+  (quedan en `data/ajustes.yaml` y también los usan las alertas automáticas);
+- activar el **modo demostración** para ver cómo funciona sin internet (datos ficticios).
+
 ## Cálculo de costo
 
 ```
@@ -37,7 +56,7 @@ El puntaje de noticias suma pesos por evento (huelga, bloqueo, fuerza mayor…) 
 (Las Bambas, Antamina, Cerro Verde, Callao…). Solo cuenta noticias que hablan de cobre o minería.
 Las listas están en `monitor/noticias.py`.
 
-## Uso local
+## Uso por terminal (sin tablero)
 
 ```bash
 pip install -r requirements.txt
@@ -77,4 +96,4 @@ No se hace scraping del sitio de la LME, porque sus términos lo prohíben.
 ## Próximas fases
 
 - **Fase 2:** clasificación de noticias con IA (relevancia, gravedad y resumen diario en español).
-- **Fase 3:** tablero en Streamlit con histórico, comparación de proveedores e inventario.
+- **Fase 3:** publicar el tablero en internet (Streamlit Community Cloud) para verlo desde el celular.

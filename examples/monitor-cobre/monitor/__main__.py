@@ -4,12 +4,10 @@ import os
 import sys
 from datetime import datetime, timezone
 
-import yaml
-
-from . import alertas, cobre, costos, estado, noticias, reporte, trm
+from . import alertas, cobre, configuracion, costos, estado, noticias, reporte, trm
 
 
-def ejecutar(cfg, base, enviar=True):
+def ejecutar(cfg, base, enviar=True, guardar=True):
     errores = []
     ahora = datetime.now(timezone.utc)
     ctx = {"fecha": ahora.date().isoformat(), "fecha_hora": ahora.strftime("%Y-%m-%d %H:%M UTC")}
@@ -18,12 +16,14 @@ def ejecutar(cfg, base, enviar=True):
         serie_trm = trm.obtener()
         ctx["trm"] = serie_trm[0][1]
         ctx["trm_var_semanal"] = costos.variacion_pct(serie_trm, 5)
+        ctx["serie_trm"] = serie_trm
     except Exception as e:
         errores.append(f"TRM: {e}")
 
     try:
         precio, serie_cu, fuente = cobre.obtener(cfg.get("cobre"))
-        ctx.update(cobre_usd_t=precio, fuente_cobre=fuente, cobre_var_semanal=costos.variacion_pct(serie_cu, 5))
+        ctx.update(cobre_usd_t=precio, fuente_cobre=fuente, cobre_var_semanal=costos.variacion_pct(serie_cu, 5),
+                   serie_cobre=serie_cu)
     except Exception as e:
         errores.append(f"Cobre: {e}")
 
@@ -40,6 +40,8 @@ def ejecutar(cfg, base, enviar=True):
     nuevas = [a for a in todas if a["id"] not in set(enviadas)]
 
     texto = reporte.generar(ctx, todas, errores)
+    if not guardar:
+        return ctx, todas, nuevas, errores, texto
     with open(os.path.join(base, "reportes", "ultimo.md"), "w", encoding="utf-8") as f:
         f.write(texto)
     resumen = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -74,8 +76,7 @@ def main(argv=None):
     ap.add_argument("--config", default=os.path.join(base, "config.yaml"))
     ap.add_argument("--sin-envio", action="store_true", help="no enviar Telegram/correo")
     args = ap.parse_args(argv)
-    with open(args.config, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+    cfg = configuracion.cargar(base, args.config)
     _, todas, nuevas, errores, texto = ejecutar(cfg, base, enviar=not args.sin_envio)
     print(texto)
     print(f"Alertas: {len(todas)} (nuevas: {len(nuevas)}). Errores de fuentes: {len(errores)}", file=sys.stderr)

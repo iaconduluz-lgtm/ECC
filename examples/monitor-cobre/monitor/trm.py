@@ -19,7 +19,7 @@ def parse(rows):
     return out
 
 
-def obtener(dias=15):
+def obtener(dias=30):
     params = {"$order": "vigenciadesde DESC", "$limit": dias}
     serie = parse(red.get(URL, params=params).json())
     if not serie:
