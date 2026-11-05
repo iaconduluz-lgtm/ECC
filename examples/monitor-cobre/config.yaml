@@ -47,14 +47,20 @@ alertas:
   ahorro_minimo_cambio_proveedor_pct: 2.0  # alerta si otro proveedor es al menos X % más barato
 
 noticias:
-  max_horas: 48
-  google_news:
-    - "cobre Perú huelga"
-    - "cobre Perú bloqueo minero"
-    - "Las Bambas bloqueo"
-    - "corredor minero sur Perú"
-    - "puerto Callao paro"
-    - "Perú exportación cobre"
+  max_horas: 72          # noticias de los últimos 3 días
+  google_news:           # búsquedas en español (Perú)
+    - "cobre Perú"
+    - "minería Perú huelga OR paro OR bloqueo"
+    - "Las Bambas"
+    - "corredor minero sur"
+    - "Cerro Verde OR Antamina OR Quellaveco"
+    - "puerto Callao paro OR huelga"
     - "precio del cobre"
+    - "Cochilco cobre"
+  google_news_en:        # búsquedas en inglés (mercado mundial)
+    - "copper price LME"
+    - "Peru copper mine"
+    - "copper supply disruption"
+    - "copper tariffs"
   gdelt:
     - '(copper OR cobre) (Peru OR Perú) (strike OR huelga OR blockade OR bloqueo OR protest OR protesta)'

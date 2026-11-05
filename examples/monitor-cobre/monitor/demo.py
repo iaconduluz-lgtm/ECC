@@ -37,7 +37,7 @@ def _rss():
     return f"<rss><channel>{items}</channel></rss>"
 
 
-def falso_get(url, params=None):
+def falso_get(url, params=None, headers=None):
     r = mock.Mock()
     if "datos.gov.co" in url:
         r.json.return_value = _trm()

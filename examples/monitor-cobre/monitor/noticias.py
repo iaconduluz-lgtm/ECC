@@ -18,11 +18,14 @@ EVENTOS = {
     "estado de emergencia": 4, "cierre": 2, "toma de": 3, "protesta": 2, "protest": 2,
     "conflicto": 2, "derrame": 2, "accidente": 2, "arancel": 2, "tariff": 2,
     "impuesto": 1, "regalias": 1, "sanciones": 2, "inventarios": 1, "deficit": 2,
+    "escasez": 3, "shortage": 3, "disruption": 3, "interrupcion": 3, "outage": 3, "landslide": 3,
+    "deslizamiento": 3, "huaico": 3, "export ban": 4, "prohibe": 2, "aranceles": 2, "tariffs": 2,
 }
 ACTIVOS = {
     "las bambas": 3, "antamina": 3, "cerro verde": 3, "quellaveco": 3, "toquepala": 2,
     "cuajone": 2, "antapaccay": 2, "constancia": 2, "tia maria": 2, "corredor minero": 3,
     "callao": 2, "matarani": 2, "southern copper": 2, "codelco": 2, "escondida": 2,
+    "grasberg": 2, "kamoa": 2, "cobre panama": 2, "glencore": 1, "freeport": 1,
 }
 TEMA = ("cobre", "copper", "miner", "minas?")
 
@@ -38,14 +41,14 @@ def _hay(termino, texto):
 
 
 def puntaje(titulo):
-    """Puntaje de riesgo 0-10. Cero si la noticia no trata de cobre/minería."""
+    """Puntaje de riesgo 0-10. Cero si no trata de cobre/minería; 1 si trata del tema sin señales de riesgo."""
     t = normalizar(titulo)
     activos = [k for k in ACTIVOS if _hay(re.escape(k), t)]
     if not activos and not any(_hay(k, t) for k in TEMA):
         return 0, []
     eventos = [k for k in EVENTOS if _hay(re.escape(k), t)]
     total = sum(EVENTOS[k] for k in eventos) + sum(ACTIVOS[k] for k in activos)
-    return min(total, 10), eventos + activos
+    return max(1, min(total, 10)), eventos + activos
 
 
 def _id(url, titulo):
@@ -79,8 +82,12 @@ def parse_gdelt(payload):
     return items
 
 
-def _buscar_google(q):
-    params = {"q": q, "hl": "es-419", "gl": "PE", "ceid": "PE:es-419"}
+IDIOMAS = {"es": {"hl": "es-419", "gl": "PE", "ceid": "PE:es-419"},
+           "en": {"hl": "en-US", "gl": "US", "ceid": "US:en"}}
+
+
+def _buscar_google(q, idioma="es", dias=3):
+    params = {"q": f"{q} when:{dias}d", **IDIOMAS[idioma]}
     return parse_rss(red.get(GOOGLE_RSS, params=params).text)
 
 
@@ -112,14 +119,18 @@ def filtrar(items, max_horas, ahora=None):
 
 def obtener(config, errores):
     items = []
-    for q in config.get("google_news", []):
+    dias = max(1, round(config.get("max_horas", 72) / 24))
+    busquedas = [(q, "es") for q in config.get("google_news", [])] + [(q, "en") for q in config.get("google_news_en", [])]
+    for q, idioma in busquedas:
         try:
-            items += _buscar_google(q)
+            items += _buscar_google(q, idioma, dias)
         except Exception as e:  # una búsqueda caída no detiene el resto
             errores.append(f"Google News '{q}': {e}")
     for q in config.get("gdelt", []):
         try:
             items += _buscar_gdelt(q)
+        except ValueError:
+            errores.append("GDELT: respuesta no válida (suele ser límite de consultas; se reintenta en la próxima)")
         except Exception as e:
             errores.append(f"GDELT: {e}")
-    return filtrar(items, config.get("max_horas", 48))
+    return filtrar(items, config.get("max_horas", 72))

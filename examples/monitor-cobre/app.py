@@ -145,7 +145,7 @@ with g1:
     if ctx.get("serie_cobre"):
         st.altair_chart(linea(ctx["serie_cobre"], "Cobre — último mes", "USD/t"), width="stretch")
     else:
-        st.info("Sin histórico de cobre (precio manual o fuente caída).")
+        st.info("Sin histórico de cobre (se está usando el precio manual o ninguna fuente respondió).")
 with g2:
     if ctx.get("serie_trm"):
         st.altair_chart(linea(ctx["serie_trm"], "TRM — último mes", "COP/USD"), width="stretch")
@@ -174,12 +174,21 @@ if ranking:
     p2.dataframe(df[["Proveedor", "COP/t", "USD/t", "dias_transito", "Estado"]], hide_index=True, width="stretch",
                  column_config={"dias_transito": "Días"})
 else:
-    st.info("No se puede calcular: falta la TRM o el precio del cobre.")
+    falta = "el precio del cobre" if not ctx.get("cobre_usd_t") else "la TRM"
+    st.warning(f"No se puede calcular porque falta {falta}. Mientras tanto, escribe el precio LME en "
+               "**Precio LME oficial** (barra lateral) y el cálculo aparece al instante. "
+               "Abajo, en *fuentes no respondieron*, está el detalle de cada fuente.")
 
 # ---------------- Noticias ----------------
 st.subheader("Noticias que pueden afectar el suministro")
 if ctx.get("noticias"):
     dfn = pd.DataFrame(ctx["noticias"])
+    orden = st.radio("Ordenar", ["Mayor riesgo primero", "Más recientes primero"], horizontal=True,
+                     label_visibility="collapsed")
+    if orden == "Más recientes primero":
+        dfn = dfn.sort_values("fecha", ascending=False, na_position="last")
+    st.caption(f"{len(dfn)} noticias de los últimos {round(cfg['noticias'].get('max_horas', 72) / 24)} días. "
+               "Riesgo 1/10 = habla de cobre o minería sin señales de problema.")
     dfn["Fecha"] = dfn["fecha"].map(lambda d: d.strftime("%d %b %H:%M") if d is not None else "")
     st.dataframe(dfn[["riesgo", "titulo", "fuente", "Fecha", "url"]], hide_index=True, width="stretch",
                  column_config={"riesgo": st.column_config.ProgressColumn("Riesgo", min_value=0, max_value=10, format="%d/10"),
@@ -195,6 +204,6 @@ if os.path.exists(ruta_hist):
         st.dataframe(pd.read_csv(ruta_hist).iloc[::-1], hide_index=True, width="stretch")
 
 if errores:
-    with st.expander(f"⚠️ {len(errores)} fuente(s) no respondieron"):
+    with st.expander(f"⚠️ {len(errores)} fuente(s) no respondieron", expanded=not ctx.get("cobre_usd_t")):
         for e in errores:
             st.write("-", e)

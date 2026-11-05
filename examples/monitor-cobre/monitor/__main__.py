@@ -22,7 +22,7 @@ def ejecutar(cfg, base, enviar=True, guardar=True):
         errores.append(f"TRM: {e}")
 
     try:
-        precio, serie_cu, fuente = cobre.obtener(cfg.get("cobre"))
+        precio, serie_cu, fuente = cobre.obtener(cfg.get("cobre"), errores)
         ctx.update(cobre_usd_t=precio, fuente_cobre=fuente, cobre_var_semanal=costos.variacion_pct(serie_cu, 5),
                    serie_cobre=serie_cu)
     except Exception as e:

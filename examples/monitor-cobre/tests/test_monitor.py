@@ -20,6 +20,8 @@ YAHOO = {"chart": {"result": [{
 RSS = """<rss><channel>
 <item><title>Comunidades bloquean corredor minero de Las Bambas: cobre en riesgo</title>
 <link>https://ej.pe/1</link><pubDate>Wed, 04 Nov 2026 10:00:00 GMT</pubDate><source>Diario</source></item>
+<item><title>Precio del cobre se mantiene estable</title><link>https://ej.pe/3</link>
+<pubDate>Wed, 04 Nov 2026 09:00:00 GMT</pubDate></item>
 <item><title>Receta de ceviche peruano</title><link>https://ej.pe/2</link>
 <pubDate>Wed, 04 Nov 2026 10:00:00 GMT</pubDate></item>
 </channel></rss>"""
@@ -41,6 +43,50 @@ class TestFuentes(unittest.TestCase):
         self.assertAlmostEqual(actual, 4.5 * 2204.62, places=1)
         self.assertEqual(len(serie), 6)  # el None se descarta
         self.assertGreater(serie[-1][1], serie[0][1])  # más reciente primero
+
+    def test_stooq_csv(self):
+        txt = "Date,Open,High,Low,Close,Volume\n2026-11-03,4.9,5,4.8,4.95,100\n2026-11-04,4.95,5.1,4.9,5.05,120\n"
+        precio, serie = cobre.parse_stooq(txt)
+        self.assertAlmostEqual(precio, 5.05 * 2204.62, places=1)
+        self.assertEqual(serie[0][0].day, 4)
+        with self.assertRaises(ValueError):
+            cobre.parse_stooq("Exceeded the daily hits limit")
+
+    def test_stooq_en_centavos(self):
+        precio, _ = cobre.parse_stooq("Date,Open,High,Low,Close,Volume\n2026-11-04,1,1,1,495.0,1\n")
+        self.assertAlmostEqual(precio, 4.95 * 2204.62, places=1)
+
+    def test_westmetall_varios_formatos(self):
+        html = """<table><tr><th>date</th><th>LME Copper Cash-Settlement</th></tr>
+        <tr><td>04. November 2026</td><td>10,876.50</td><td>10,900.00</td></tr>
+        <tr><td>03.11.2026</td><td>10.801,00</td></tr>
+        <tr><td>basura</td><td>x</td></tr>
+        <tr><td>02. November 2026</td><td>12</td></tr></table>"""
+        precio, serie = cobre.parse_westmetall(html)
+        self.assertEqual(precio, 10876.5)
+        self.assertEqual([v for _, v in serie], [10876.5, 10801.0])  # el 12 queda fuera de rango
+        with self.assertRaises(ValueError):
+            cobre.parse_westmetall("<html>bloqueado</html>")
+
+    def test_cadena_de_fuentes_usa_la_siguiente_si_falla(self):
+        def falso(url, params=None, headers=None):
+            if "yahoo" in url:
+                raise ConnectionError("429 Too Many Requests")
+            r = mock.Mock()
+            r.text = "Date,Open,High,Low,Close,Volume\n2026-11-04,1,1,1,5.0,1\n"
+            return r
+        errores = []
+        with mock.patch("monitor.red.get", side_effect=falso):
+            precio, _, fuente = cobre.obtener({}, errores)
+        self.assertIn("Stooq", fuente)
+        self.assertGreater(precio, 10000)
+        self.assertTrue(any("429" in e for e in errores))
+
+    def test_cadena_todas_fallan(self):
+        with mock.patch("monitor.red.get", side_effect=ConnectionError("sin red")):
+            with self.assertRaises(RuntimeError) as cm:
+                cobre.obtener({})
+        self.assertIn("Westmetall", str(cm.exception))
 
     def test_cobre_manual(self):
         self.assertEqual(cobre.obtener({"precio_manual_usd_t": 9800})[0], 9800.0)
@@ -69,18 +115,32 @@ class TestNoticias(unittest.TestCase):
         self.assertIn("las bambas", terms)
         self.assertEqual(noticias.puntaje("Comparo precios de autos")[0], 0)
         self.assertEqual(noticias.puntaje("Paro de transportistas en Lima")[0], 0)  # no es de cobre
+        self.assertEqual(noticias.puntaje("Los futuros del cobre se consolidan")[0], 1)  # tema sí, riesgo no
 
     def test_filtrar_deduplica_y_descarta_irrelevantes(self):
         items = noticias.parse_rss(RSS)
         ahora = datetime(2026, 11, 5, tzinfo=timezone.utc)
         out = noticias.filtrar(items + items, 48, ahora=ahora)
-        self.assertEqual(len(out), 1)
+        self.assertEqual(len(out), 2)  # el ceviche se descarta, la de precio estable se conserva
         self.assertIn("Las Bambas", out[0]["titulo"])
+        self.assertEqual(out[1]["riesgo"], 1)
         self.assertEqual(noticias.filtrar(items, 1, ahora=ahora), [])  # demasiado viejas
 
     def test_gdelt(self):
         out = noticias.parse_gdelt({"articles": [{"title": "t", "url": "u", "domain": "d", "seendate": "20261104T100000Z"}]})
         self.assertEqual(out[0]["fecha"].day, 4)
+
+
+    def test_google_busca_ultimos_dias_y_en_ingles(self):
+        llamadas = []
+        def falso(url, params=None, headers=None):
+            llamadas.append(params)
+            r = mock.Mock(); r.text = "<rss><channel></channel></rss>"; r.json.return_value = {}
+            return r
+        with mock.patch("monitor.red.get", side_effect=falso):
+            noticias.obtener({"max_horas": 72, "google_news": ["cobre"], "google_news_en": ["copper"]}, [])
+        self.assertEqual(llamadas[0]["q"], "cobre when:3d")
+        self.assertEqual(llamadas[1]["hl"], "en-US")
 
 
 class TestAlertas(unittest.TestCase):
@@ -104,7 +164,7 @@ class TestAlertas(unittest.TestCase):
 
 class TestEjecucion(unittest.TestCase):
     def test_ciclo_completo_con_red_simulada(self):
-        def falso_get(url, params=None):
+        def falso_get(url, params=None, headers=None):
             r = mock.Mock()
             if "datos.gov.co" in url:
                 r.json.return_value = TRM_ROWS
