@@ -13,6 +13,8 @@ NOTICIAS_DEMO = [
     "Antamina reporta producción récord de cobre en el trimestre",
     "Trabajadores de Elcope amenazan con huelga por negociación salarial",
     "Comunidades levantan el bloqueo en Cuajone tras 12 días",
+    "Paro camionero bloquea la vía al Pacífico entre Buenaventura y Cali",
+    "Dólar se dispara en Colombia y supera los 4.300 pesos",
 ]
 
 

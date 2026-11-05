@@ -23,7 +23,7 @@ class NoticiaClave(BaseModel):
 class Analisis(BaseModel):
     resumen: str
     presion_precio_cobre: Literal["alcista", "bajista", "neutral", "mixta"]
-    riesgo_suministro_peru: Literal["bajo", "medio", "alto"]
+    riesgo_suministro_peru: Literal["bajo", "medio", "alto"]  # toda la cadena: Perú, puertos y vía a la planta
     noticias_clave: List[NoticiaClave]
     si_sube_cobre: str
     si_sube_trm: str
@@ -64,7 +64,9 @@ ESQUEMA = {
 SISTEMA = (
     "Eres analista de compras de materias primas de una empresa colombiana que compra cobre en Perú, casi todo a un "
     "único proveedor (indicado en los datos como proveedor_directo), y lo transforma en cables. Cualquier problema de "
-    "ese proveedor (huelga, incendio, paro, problemas financieros, logística en Lima/Callao) es el riesgo más importante. Paga en dólares, así que le afectan el precio del cobre "
+    "ese proveedor (huelga, incendio, paro, problemas financieros, logística en Lima/Callao) es el riesgo más importante. "
+    "El material llega por el puerto indicado en puerto_llegada y va por carretera a la planta en ciudad_planta, así "
+    "que también importan paros, bloqueos y cierres en ese puerto y en esa vía, el dólar en Colombia, la DIAN y los aranceles. Paga en dólares, así que le afectan el precio del cobre "
     "(LME/COMEX) y la TRM. Analiza las noticias y los datos que te dan. Sé concreto y práctico, en español sencillo, "
     "y usa las cifras de impacto que te entregan en lugar de inventar otras. Si una noticia no es relevante, ignórala. "
     "Si los datos no alcanzan para una conclusión, dilo. Tus recomendaciones son de apoyo: la decisión final es del equipo."
@@ -85,6 +87,7 @@ def _datos(ctx, cfg, sens, recomendacion_reglas):
         "cobre_var_semanal_pct": ctx.get("cobre_var_semanal"), "cobre_contexto": ctx.get("contexto_cobre"),
         "proveedor_actual": prov.get("nombre"),
         "proveedor_directo": (cfg.get("noticias") or {}).get("proveedor_claves", []),
+        "puerto_llegada": cfg["empresa"].get("puerto_llegada"), "ciudad_planta": cfg["empresa"].get("ciudad_planta"),
         "costo_por_proveedor": [{k: r[k] for k in ("nombre", "usd_t", "cop_t", "dias_transito")}
                                 for r in ctx.get("ranking") or []],
         "inventario_dias": ctx.get("cobertura_dias"),

@@ -22,7 +22,11 @@ EVENTOS = {
     "deslizamiento": 3, "huaico": 3, "export ban": 4, "prohibe": 2, "aranceles": 2, "tariffs": 2,
     "impuesto a las exportaciones": 3, "export tax": 3,
     "retrasa": 2, "retraso": 2, "delay": 2, "incendio": 4, "fire": 3, "explosion": 4, "paraliza": 3,
-    "detiene": 3, "cierra": 3, "indefinid": 1, "quiebra": 5, "bankruptcy": 5, "insolvencia": 5, "falta de": 2,
+    "detiene": 3, "cierra la via": 3, "cierran la via": 3, "cierra el puerto": 4, "indefinid": 1,
+    "bloquea": 4, "paro camionero": 1, "paro nacional": 3, "cierre de la via": 3, "cierre total": 3,
+    "derrumbe": 3, "inundacion": 3, "congestion": 2, "represados": 3, "contenedores varados": 3,
+    "se dispara": 4, "devaluacion": 4, "dolar sube": 3, "sube el dolar": 3, "reforma tributaria": 2,
+    "sobretasa": 2, "contrabando": 1, "quiebra": 5, "bankruptcy": 5, "insolvencia": 5, "falta de": 2,
     # señales que bajan el riesgo (buenas noticias para el suministro)
     "record": -2, "reanuda": -3, "resume": -3, "acuerdo": -2, "levantan": -2, "levanta el": -2, "agreement": -2,
 }
@@ -31,8 +35,16 @@ ACTIVOS = {
     "cuajone": 2, "antapaccay": 2, "constancia": 2, "tia maria": 2, "corredor minero": 3,
     "callao": 2, "matarani": 2, "southern copper": 2, "codelco": 2, "escondida": 2,
     "grasberg": 2, "kamoa": 2, "cobre panama": 2, "glencore": 1, "freeport": 1,
+    # Colombia: puerto de llegada, vía a la planta y entidades que cambian tus costos
+    "buenaventura": 3, "via al pacifico": 3, "via buenaventura": 3, "via cali": 2,
+    "dian": 2, "banco de la republica": 2, "spbun": 2, "sociedad portuaria": 2,
 }
-TEMA = ("cobre", "copper", "miner", "minas?")
+# Lugares que solo cuentan si la noticia habla de un problema (evita "festival en Cali").
+CONTEXTO = ("cali", "valle del cauca", "colombia")
+TEMA = ("cobre", "copper", "miner", "minas?",
+        # Colombia: dólar, comercio exterior y la ruta Buenaventura - Cali
+        "dolar", "trm", "tasa de cambio", "peso colombiano", "importacion", "importador", "dian", "aduana",
+        "puerto", "portuari", "camioner", "transportador", "carga")
 
 
 def normalizar(texto):
@@ -64,9 +76,10 @@ def evaluar(titulo, proveedor=()):
     t = normalizar(titulo)
     del_proveedor = any(_hay(re.escape(normalizar(k)), t) for k in proveedor)
     activos = [k for k in ACTIVOS if _hay(re.escape(k), t)]
-    if not del_proveedor and not activos and not any(_hay(k, t) for k in TEMA):
-        return {"riesgo": 0, "nivel": "", "terminos": [], "afecta_proveedor": False, "certeza": "", "duracion_dias": None}
     eventos = [k for k in EVENTOS if _hay(re.escape(k), t)]
+    en_contexto = any(_hay(k, t) for k in CONTEXTO) and any(EVENTOS[k] >= 3 for k in eventos)
+    if not del_proveedor and not activos and not en_contexto and not any(_hay(k, t) for k in TEMA):
+        return {"riesgo": 0, "nivel": "", "terminos": [], "afecta_proveedor": False, "certeza": "", "duracion_dias": None}
     total = sum(EVENTOS[k] for k in eventos) + sum(ACTIVOS[k] for k in activos)
     hay_problema = any(EVENTOS[k] > 0 for k in eventos)
     if del_proveedor and hay_problema:
@@ -134,6 +147,7 @@ def parse_gdelt(payload):
 
 
 IDIOMAS = {"es": {"hl": "es-419", "gl": "PE", "ceid": "PE:es-419"},
+           "co": {"hl": "es-419", "gl": "CO", "ceid": "CO:es-419"},
            "en": {"hl": "en-US", "gl": "US", "ceid": "US:en"}}
 
 
@@ -171,7 +185,9 @@ def filtrar(items, max_horas, ahora=None, proveedor=()):
 def obtener(config, errores):
     items = []
     dias = max(1, round(config.get("max_horas", 72) / 24))
-    busquedas = [(q, "es") for q in config.get("google_news", [])] + [(q, "en") for q in config.get("google_news_en", [])]
+    busquedas = ([(q, "es") for q in config.get("google_news", [])]
+                 + [(q, "co") for q in config.get("google_news_colombia", [])]
+                 + [(q, "en") for q in config.get("google_news_en", [])])
     for q, idioma in busquedas:
         try:
             items += _buscar_google(q, idioma, dias)

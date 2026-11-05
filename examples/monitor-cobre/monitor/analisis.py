@@ -51,13 +51,20 @@ def contexto(serie, dias=(30, 90, 365)):
 
 
 CATEGORIAS = [
+    # Logística primero: un paro en un puerto o en la vía a tu planta es logística, no minería.
+    ("Logística / puertos", ("callao", "matarani", "buenaventura", "via al pacifico", "via buenaventura", "via cali",
+                             "puerto", "portuari", "port ", "camioner", "transportador", "contenedor", "flete",
+                             "freight", "naviera", "shipping", "carga"),
+     "Puede retrasar el embarque, la llegada a Buenaventura o el transporte a tu planta en Cali, y subir el flete."),
     ("Suministro Perú", ("huelga", "paro", "bloqueo", "bloquean", "strike", "blockade", "fuerza mayor", "force majeure",
                          "suspende", "las bambas", "antamina", "cerro verde", "quellaveco", "corredor minero", "toma de"),
      "Puede retrasar o encarecer tus envíos desde Perú y presionar el precio al alza."),
-    ("Logística / puertos", ("callao", "matarani", "puerto", "port ", "flete", "freight", "naviera", "shipping"),
-     "Puede retrasar embarques y subir el flete."),
-    ("Política / aranceles", ("arancel", "tariff", "impuesto", "regalias", "export ban", "sancion", "gobierno", "congreso"),
-     "Genera volatilidad en el precio y puede cambiar costos de importación/exportación."),
+    ("Política / aranceles", ("arancel", "tariff", "impuesto", "regalias", "export ban", "sancion", "gobierno", "congreso",
+                              "dian", "aduana", "importacion", "reforma tributaria", "sobretasa"),
+     "Puede cambiar tus costos de importación o generar volatilidad en el precio."),
+    ("Dólar / economía", ("dolar", "trm", "tasa de cambio", "peso colombiano", "banco de la republica", "devaluacion",
+                          "tasas de interes", "inflacion"),
+     "Mueve la TRM: si el dólar sube, tu cobre cuesta más en pesos."),
     ("Oferta mundial", ("chile", "codelco", "escondida", "grasberg", "kamoa", "cobre panama", "supply", "oferta",
                         "deficit", "shortage", "escasez", "inventarios", "stocks"),
      "Menos oferta mundial suele subir el precio; más oferta, bajarlo."),
@@ -137,8 +144,8 @@ def recomendacion(ctx, cfg):
                             "Cotiza con un proveedor alternativo y revisa cuántos días de inventario te quedan."] + razones}
     if riesgo_peru:
         puntos += 1
-        razones.append(f"{len(riesgo_peru)} noticia(s) de riesgo alto para el suministro desde Perú: "
-                       "asegurar material antes de que suba o se retrase.")
+        razones.append(f"{len(riesgo_peru)} noticia(s) de riesgo alto para tu suministro (Perú, puertos o la vía a "
+                       "tu planta): asegurar material antes de que suba o se retrase.")
 
     cob, minimo = ctx.get("cobertura_dias"), cfg["empresa"]["cobertura_minima_dias"]
     if cob is not None and cob < minimo:

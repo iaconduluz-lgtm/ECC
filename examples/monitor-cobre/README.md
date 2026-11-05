@@ -7,7 +7,7 @@ Cada hora revisa:
 |---|---|---|
 | TRM oficial | datos.gov.co (Superfinanciera, dataset `32sa-8pi3`) | 1 vez al día |
 | Precio del cobre | COMEX `HG=F` (Yahoo Finance), aproximación a LME | ~15 min de retraso |
-| Riesgo de suministro | Google News RSS + GDELT (huelgas, bloqueos, puertos, aranceles) | continua |
+| Riesgo de suministro | Google News RSS + GDELT: Perú (Elcope, minas, Callao), Colombia (Buenaventura, vía al Pacífico, Cali, dólar, DIAN) y mercado mundial | continua |
 
 Con eso calcula el **costo puesto en planta en COP/t por proveedor**, lo compara y envía alertas
 por Telegram y/o correo.

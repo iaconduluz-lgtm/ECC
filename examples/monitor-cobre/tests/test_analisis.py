@@ -109,9 +109,26 @@ class TestNiveles(unittest.TestCase):
             "Incendio en planta de Elcope paraliza producción": "Peligro",   # proveedor directo
             "Huelga en Electro Conductores Peruanos": "Peligro",
             "Trabajadores de Elcope amenazan con huelga": "Medio",
+            # Colombia: ruta Buenaventura - Cali, dólar y aduana
+            "Paro camionero bloquea la vía al Pacífico entre Buenaventura y Cali": "Peligro",
+            "Derrumbe cierra la vía Buenaventura - Cali": "Peligro",
+            "Dólar se dispara en Colombia y supera los 4.300 pesos": "Medio",
+            "El dólar cierra estable en Colombia": "Bajo",
+            "DIAN anuncia nuevos aranceles a importaciones": "Medio",
+            "Levantan paro camionero y se normaliza la vía al Pacífico": "Bajo",
+            "Bloqueos en Cali por paro nacional": "Peligro",  # bloqueos en la ciudad de la planta
         }
         for titulo, esperado in casos.items():
             self.assertEqual(self.nivel(titulo)["nivel"], esperado, titulo)
+
+    def test_descarta_lo_que_no_afecta(self):
+        from monitor import noticias
+        for t in ("Festival de salsa en Cali", "Receta de ceviche peruano", "Colombia gana el partido"):
+            self.assertEqual(noticias.evaluar(t, self.PROV)["riesgo"], 0, t)
+
+    def test_tema_colombia(self):
+        self.assertEqual(analisis.clasificar({"titulo": "Paro camionero bloquea la vía al Pacífico"})[0], "Logística / puertos")
+        self.assertEqual(analisis.clasificar({"titulo": "Dólar se dispara en Colombia"})[0], "Dólar / economía")
 
     def test_proveedor_y_certeza(self):
         e = self.nivel("Elcope amplía su planta en Lima")
@@ -139,7 +156,7 @@ class TestNiveles(unittest.TestCase):
 class TestClasificacion(unittest.TestCase):
     def test_categorias(self):
         self.assertEqual(analisis.clasificar({"titulo": "Huelga en Cerro Verde"})[0], "Suministro Perú")
-        self.assertEqual(analisis.clasificar({"titulo": "Paro en el puerto del Callao"})[0], "Suministro Perú")
+        self.assertEqual(analisis.clasificar({"titulo": "Paro en el puerto del Callao"})[0], "Logística / puertos")
         self.assertEqual(analisis.clasificar({"titulo": "Estados Unidos sube aranceles al cobre"})[0], "Política / aranceles")
         self.assertEqual(analisis.clasificar({"titulo": "Codelco reduce producción"})[0], "Oferta mundial")
         g = analisis.resumen_noticias([{"titulo": "Huelga en Cerro Verde", "riesgo": 8},
