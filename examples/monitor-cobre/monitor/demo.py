@@ -15,6 +15,8 @@ NOTICIAS_DEMO = [
     "Comunidades levantan el bloqueo en Cuajone tras 12 días",
     "Paro camionero bloquea la vía al Pacífico entre Buenaventura y Cali",
     "Dólar se dispara en Colombia y supera los 4.300 pesos",
+    "Copper hits record high as Chile mine strike halts output",
+    "Drought cuts Panama Canal transits, freight rates surge",
 ]
 
 

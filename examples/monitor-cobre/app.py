@@ -348,7 +348,9 @@ with t_not:
             "| 🔴 Peligro | 8–10 | Interrupción grave o prolongada, o problema serio en tu proveedor | Activar proveedor alternativo; asegurar inventario |\n\n"
             "Suben el nivel: que mencione a **tu proveedor** (Elcope), que sea un **hecho** (\"inicia\", \"paraliza\") y "
             "que dure **varios días**. Lo bajan: que sea solo una **amenaza o propuesta** (máximo Medio) o una "
-            "**buena noticia** (\"levantan el bloqueo\", \"reanuda\"). Las noticias de tu proveedor generan alerta desde Medio.")
+            "**buena noticia** (\"levantan el bloqueo\", \"reanuda\"). Las noticias de tu proveedor generan alerta desde Medio.\n\n"
+            "**Región:** Perú y Colombia cubren tu cadena directa (Elcope → Callao → Buenaventura → Cali). "
+            "Las noticias del **resto del mundo** llegan como máximo a **Alto**: mueven el precio, pero no cortan tu suministro.")
 
     st.subheader("Análisis automático de noticias")
     grupos = analisis.resumen_noticias(noticias)
@@ -399,19 +401,21 @@ with t_not:
         dfn["Tema"] = [analisis.clasificar(n)[0] for n in noticias]
         dfn["Nivel"] = dfn["nivel"].map(lambda nv: f"{ICONO.get(nv, '')} {nv}")
         dfn["Proveedor"] = dfn["afecta_proveedor"].map(lambda x: "⚠️ Sí" if x else "")
-        f1, f2 = st.columns([2, 3])
+        dfn["Región"] = dfn["region"].map({"Perú": "🇵🇪 Perú", "Colombia": "🇨🇴 Colombia", "Mundo": "🌎 Mundo"})
+        f1, f2, f3 = st.columns([2, 2, 2])
         ver_niveles = f1.multiselect("Mostrar niveles", ORDEN_NIVELES, default=ORDEN_NIVELES,
                                      format_func=lambda nv: f"{ICONO[nv]} {nv}")
-        with f2:
+        ver_regiones = f2.multiselect("Mostrar regiones", ["Perú", "Colombia", "Mundo"], default=["Perú", "Colombia", "Mundo"])
+        with f3:
             orden_n = st.radio("Ordenar", ["Mayor riesgo primero", "Más recientes primero"], horizontal=True)
-        dfn = dfn[dfn["nivel"].isin(ver_niveles)]
+        dfn = dfn[dfn["nivel"].isin(ver_niveles) & dfn["region"].isin(ver_regiones)]
         if orden_n == "Más recientes primero":
             dfn = dfn.sort_values("fecha", ascending=False, na_position="last")
         dfn["Fecha"] = dfn["fecha"].map(lambda d: d.astimezone(ZoneInfo("America/Bogota")).strftime("%d %b %H:%M")
                                         if d is not None and not pd.isna(d) else "")
-        st.caption(f"{len(dfn)} noticias de los últimos {round(cfg['noticias'].get('max_horas', 72) / 24)} días. "
+        st.caption(f"{len(dfn)} de {len(noticias)} noticias de los últimos {round(cfg['noticias'].get('max_horas', 72) / 24)} días. "
                    "Proveedor = la noticia menciona a tu proveedor directo.")
-        st.dataframe(dfn[["Nivel", "riesgo", "Proveedor", "certeza", "Tema", "titulo", "fuente", "Fecha", "url"]],
+        st.dataframe(dfn[["Nivel", "riesgo", "Región", "Proveedor", "certeza", "Tema", "titulo", "fuente", "Fecha", "url"]],
                      hide_index=True, width="stretch",
                      column_config={"riesgo": st.column_config.ProgressColumn("Riesgo", min_value=0, max_value=10, format="%d/10"),
                                     "certeza": "Certeza", "titulo": st.column_config.TextColumn("Título", width="large"),

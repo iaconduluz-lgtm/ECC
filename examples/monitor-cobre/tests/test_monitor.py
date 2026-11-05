@@ -179,8 +179,9 @@ class TestNoticias(unittest.TestCase):
             return r
         with mock.patch("monitor.red.get", side_effect=falso):
             noticias.obtener({"max_horas": 72, "google_news": ["cobre"], "google_news_en": ["copper"]}, [])
-        self.assertEqual(llamadas[0]["q"], "cobre when:3d")
-        self.assertEqual(llamadas[1]["hl"], "en-US")
+        por_q = {c["q"]: c for c in llamadas}  # las búsquedas corren en paralelo: no depender del orden
+        self.assertIn("cobre when:3d", por_q)
+        self.assertEqual(por_q["copper when:3d"]["hl"], "en-US")
 
 
 class TestAlertas(unittest.TestCase):

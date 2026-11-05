@@ -75,10 +75,26 @@ noticias:
     - "Banco de la República tasas"
     - "DIAN importaciones aranceles"
     - "cobre Colombia"
+  google_news_mundo:     # búsquedas en español sobre el resto del mundo
+    - "Codelco producción cobre"
+    - "Chile cobre huelga"
+    - "aranceles cobre Estados Unidos"
+    - "China demanda cobre"
+    - "Canal de Panamá"
   google_news_en:        # búsquedas en inglés (mercado mundial)
     - "copper price LME"
+    - "copper price record"
     - "Peru copper mine"
+    - "copper mine strike"
+    - "copper smelter"
     - "copper supply disruption"
+    - "copper force majeure"
     - "copper tariffs"
+    - "China copper demand"
+    - "Chile copper production"
+    - "Congo copper"
+    - "Panama Canal shipping"
+    - "container shipping rates"
+    - "dollar Federal Reserve rates"
   gdelt:
-    - '(copper OR cobre) (Peru OR Perú) (strike OR huelga OR blockade OR bloqueo OR protest OR protesta)'
+    - '(copper OR cobre) (strike OR huelga OR blockade OR bloqueo OR "force majeure" OR shortage OR tariff OR arancel)'

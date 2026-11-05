@@ -1,6 +1,7 @@
 """Noticias de riesgo de suministro: Google News RSS + GDELT, con puntaje por palabras clave."""
 import hashlib
 import re
+from concurrent.futures import ThreadPoolExecutor
 import unicodedata
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
@@ -26,9 +27,14 @@ EVENTOS = {
     "bloquea": 4, "paro camionero": 1, "paro nacional": 3, "cierre de la via": 3, "cierre total": 3,
     "derrumbe": 3, "inundacion": 3, "congestion": 2, "represados": 3, "contenedores varados": 3,
     "se dispara": 4, "devaluacion": 4, "dolar sube": 3, "sube el dolar": 3, "reforma tributaria": 2,
-    "sobretasa": 2, "contrabando": 1, "quiebra": 5, "bankruptcy": 5, "insolvencia": 5, "falta de": 2,
+    "sobretasa": 2, "contrabando": 1,
+    # mundo (titulares en inglés): interrupciones, precios disparados, logística global
+    "halt": 3, "halts": 3, "suspends": 4, "closure": 3, "flood": 3, "flooding": 3, "explosion": 4, "collapse": 3,
+    "export restrictions": 4, "restricciones a la exportacion": 4, "sanctions": 2, "war": 2, "guerra": 2, "attack": 2,
+    "record high": 3, "maximo historico": 3, "record historico": 3, "soars": 3, "surges": 3, "se dispara": 4,
+    "sequia": 2, "drought": 2, "freight rates": 2, "fletes": 2, "tarifas de flete": 2, "quiebra": 5, "bankruptcy": 5, "insolvencia": 5, "falta de": 2,
     # señales que bajan el riesgo (buenas noticias para el suministro)
-    "record": -2, "reanuda": -3, "resume": -3, "acuerdo": -2, "levantan": -2, "levanta el": -2, "agreement": -2,
+    "produccion record": -2, "record production": -2, "reanuda": -3, "resume": -3, "acuerdo": -2, "levantan": -2, "levanta el": -2, "agreement": -2,
 }
 ACTIVOS = {
     "las bambas": 3, "antamina": 3, "cerro verde": 3, "quellaveco": 3, "toquepala": 2,
@@ -38,13 +44,19 @@ ACTIVOS = {
     # Colombia: puerto de llegada, vía a la planta y entidades que cambian tus costos
     "buenaventura": 3, "via al pacifico": 3, "via buenaventura": 3, "via cali": 2,
     "dian": 2, "banco de la republica": 2, "spbun": 2, "sociedad portuaria": 2,
+    # mundo: grandes productores y rutas marítimas
+    "kamoto": 2, "tenke": 2, "zambia": 1, "congo": 1, "drc": 1, "chuquicamata": 2, "el teniente": 2,
+    "collahuasi": 2, "los pelambres": 2, "oyu tolgoi": 2, "canal de panama": 3, "panama canal": 3,
+    "mar rojo": 2, "red sea": 2, "suez": 2,
 }
 # Lugares que solo cuentan si la noticia habla de un problema (evita "festival en Cali").
 CONTEXTO = ("cali", "valle del cauca", "colombia")
 TEMA = ("cobre", "copper", "miner", "minas?",
         # Colombia: dólar, comercio exterior y la ruta Buenaventura - Cali
         "dolar", "trm", "tasa de cambio", "peso colombiano", "importacion", "importador", "dian", "aduana",
-        "puerto", "portuari", "camioner", "transportador", "carga")
+        "puerto", "portuari", "camioner", "transportador", "carga",
+        # mundo: logística marítima y dólar global
+        "shipping", "naviera", "freight", "flete", "smelter", "fundicion", "refineria", "refinery")
 
 
 def normalizar(texto):
@@ -59,11 +71,28 @@ def _hay(termino, texto):
 
 NIVELES = [(8, "Peligro"), (6, "Alto"), (4, "Medio"), (1, "Bajo")]
 ICONO = {"Peligro": "🔴", "Alto": "🟠", "Medio": "🟡", "Bajo": "🟢"}
-POSITIVAS = ("record", "reanuda", "resume", "acuerdo", "levantan", "levanta el", "agreement", "normaliza", "restablece")
+POSITIVAS = ("produccion record", "record production", "reanuda", "resume", "acuerdo", "levantan", "levanta el", "agreement", "normaliza", "restablece")
 POSIBLE = ("amenaza", "amenazan", "anuncia", "anuncian", "podria", "posible", "evalua", "evaluan", "convocan",
            "plantea", "propone", "threaten", "could", "may ", "plans to", "warns")
 HECHO = ("inicia", "inician", "en curso", "continua", "persiste", "cumple", "ongoing", "continues",
          "enters", "segundo dia", "tercer dia", "paraliza", "detiene", "suspende")
+
+
+PERU = ("peru", "lima", "callao", "matarani", "las bambas", "antamina", "cerro verde", "quellaveco", "toquepala",
+        "cuajone", "antapaccay", "constancia", "tia maria", "corredor minero", "southern copper", "cusco", "apurimac",
+        "arequipa", "moquegua", "ilo")
+COLOMBIA = ("colombia", "buenaventura", "cali", "valle del cauca", "via al pacifico", "dian", "banco de la republica",
+            "peso colombiano", "bogota", "cartagena", "barranquilla", "trm")
+
+
+def region(titulo, del_proveedor=False):
+    """Perú, Colombia o Mundo, según los lugares que menciona el titular."""
+    t = normalizar(titulo)
+    if del_proveedor or any(_hay(re.escape(k) + r"\b", t) for k in PERU):
+        return "Perú"
+    if any(_hay(re.escape(k) + r"\b", t) for k in COLOMBIA):
+        return "Colombia"
+    return "Mundo"
 
 
 def nivel(riesgo):
@@ -79,7 +108,8 @@ def evaluar(titulo, proveedor=()):
     eventos = [k for k in EVENTOS if _hay(re.escape(k), t)]
     en_contexto = any(_hay(k, t) for k in CONTEXTO) and any(EVENTOS[k] >= 3 for k in eventos)
     if not del_proveedor and not activos and not en_contexto and not any(_hay(k, t) for k in TEMA):
-        return {"riesgo": 0, "nivel": "", "terminos": [], "afecta_proveedor": False, "certeza": "", "duracion_dias": None}
+        return {"riesgo": 0, "nivel": "", "terminos": [], "afecta_proveedor": False, "certeza": "", "duracion_dias": None,
+                "region": ""}
     total = sum(EVENTOS[k] for k in eventos) + sum(ACTIVOS[k] for k in activos)
     hay_problema = any(EVENTOS[k] > 0 for k in eventos)
     if del_proveedor and hay_problema:
@@ -98,6 +128,9 @@ def evaluar(titulo, proveedor=()):
             total += 2 if dias >= 7 else 1
         if posible and not hecho:
             total = min(total, 5)  # una amenaza o propuesta todavía no es un hecho: máximo Medio
+    reg = region(titulo, del_proveedor)
+    if reg == "Mundo":
+        total = min(total, 7)  # el resto del mundo mueve el precio, pero no corta tu suministro directo: máximo Alto
     riesgo = max(1, min(total, 10))
     if positiva:
         certeza = "Buena noticia"
@@ -106,6 +139,7 @@ def evaluar(titulo, proveedor=()):
     else:
         certeza = "Posible" if posible and not hecho else "Hecho"
     return {"riesgo": riesgo, "nivel": nivel(riesgo), "terminos": eventos + activos, "afecta_proveedor": del_proveedor,
+            "region": reg,
             "certeza": certeza, "duracion_dias": dias}
 
 
@@ -183,16 +217,26 @@ def filtrar(items, max_horas, ahora=None, proveedor=()):
 
 
 def obtener(config, errores):
-    items = []
+    """Ejecuta todas las búsquedas en paralelo (una caída no detiene el resto)."""
     dias = max(1, round(config.get("max_horas", 72) / 24))
     busquedas = ([(q, "es") for q in config.get("google_news", [])]
                  + [(q, "co") for q in config.get("google_news_colombia", [])]
+                 + [(q, "es") for q in config.get("google_news_mundo", [])]
                  + [(q, "en") for q in config.get("google_news_en", [])])
-    for q, idioma in busquedas:
+
+    def una(busqueda):
+        q, idioma = busqueda
         try:
-            items += _buscar_google(q, idioma, dias)
-        except Exception as e:  # una búsqueda caída no detiene el resto
-            errores.append(f"Google News '{q}': {e}")
+            return _buscar_google(q, idioma, dias), None
+        except Exception as e:
+            return [], f"Google News '{q}': {e}"
+
+    items = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for encontrados, error in ex.map(una, busquedas):  # map conserva el orden
+            items += encontrados
+            if error:
+                errores.append(error)
     for q in config.get("gdelt", []):
         try:
             items += _buscar_gdelt(q)

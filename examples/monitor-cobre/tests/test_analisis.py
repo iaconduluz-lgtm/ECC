@@ -121,6 +121,23 @@ class TestNiveles(unittest.TestCase):
         for titulo, esperado in casos.items():
             self.assertEqual(self.nivel(titulo)["nivel"], esperado, titulo)
 
+    def test_mundo(self):
+        from monitor import noticias
+        e = noticias.evaluar("Copper hits record high as Chile mine strike halts output", self.PROV)
+        self.assertEqual((e["region"], e["nivel"]), ("Mundo", "Alto"))  # mundo: máximo Alto
+        e = noticias.evaluar("Glencore declares force majeure at Kamoto copper mine in Congo", self.PROV)
+        self.assertEqual(e["nivel"], "Alto")
+        self.assertEqual(noticias.evaluar("Bloqueo en Las Bambas", self.PROV)["region"], "Perú")
+        self.assertEqual(noticias.evaluar("Derrumbe cierra la vía Buenaventura - Cali", self.PROV)["region"], "Colombia")
+        for t in ("Taylor Swift tour record", "Apple record profits"):
+            self.assertEqual(noticias.evaluar(t, self.PROV)["riesgo"], 0)
+
+    def test_mundo_sube_puntos_pero_no_pide_diversificar(self):
+        n = {"titulo": "Copper strike in Chile", "riesgo": 7, "region": "Mundo"}
+        r = analisis.recomendacion({"noticias": [n], "cobertura_dias": 45, "contexto_cobre": {}, "contexto_trm": {}}, cfg())
+        self.assertFalse(r["diversificar"])
+        self.assertTrue(any("mundial" in x for x in r["razones"]))
+
     def test_descarta_lo_que_no_afecta(self):
         from monitor import noticias
         for t in ("Festival de salsa en Cali", "Receta de ceviche peruano", "Colombia gana el partido"):

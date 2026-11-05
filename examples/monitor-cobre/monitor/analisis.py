@@ -133,6 +133,8 @@ def recomendacion(ctx, cfg):
 
     noticias = ctx.get("noticias", [])
     peligro_prov = [n for n in noticias if n.get("afecta_proveedor") and n["riesgo"] >= 8]
+    mundo = [n for n in noticias if n.get("region") == "Mundo" and n["riesgo"] >= cfg["alertas"]["noticia_riesgo_minimo"]]
+    noticias = [n for n in noticias if n.get("region") != "Mundo"]
     riesgo_peru = [n for n in noticias if (n["riesgo"] >= cfg["alertas"]["noticia_riesgo_minimo"]
                    and clasificar(n)[0] in ("Suministro Perú", "Logística / puertos", "Tu proveedor directo"))
                    or (n.get("afecta_proveedor") and n["riesgo"] >= 4)]
@@ -146,6 +148,11 @@ def recomendacion(ctx, cfg):
         puntos += 1
         razones.append(f"{len(riesgo_peru)} noticia(s) de riesgo alto para tu suministro (Perú, puertos o la vía a "
                        "tu planta): asegurar material antes de que suba o se retrase.")
+
+    if mundo:
+        puntos += 1
+        razones.append(f"{len(mundo)} noticia(s) mundial(es) de riesgo alto (p. ej. «{mundo[0]['titulo'][:80]}»): "
+                       "pueden subir el precio internacional; conviene no retrasar compras.")
 
     cob, minimo = ctx.get("cobertura_dias"), cfg["empresa"]["cobertura_minima_dias"]
     if cob is not None and cob < minimo:
