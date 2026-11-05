@@ -1,0 +1,1 @@
+toml>=0.10  # solo para pruebas: valida como Streamlit Cloud

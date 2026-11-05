@@ -50,10 +50,22 @@ class TestPlan(unittest.TestCase):
     def test_toml(self):
         t = inv.a_toml({**PLAN, "cierres_reales": [24]})
         self.assertIn("[ajustes.plan_inventario]", t)
-        self.assertIn("compras_importacion = [0, 10, 0", t)
-        self.assertIn("cierres_reales = [24]", t)
+        self.assertIn("compras_importacion = [0.0, 10.0, 0.0", t)
+        self.assertIn("cierres_reales = [24.0]", t)
         import tomllib
         self.assertEqual(tomllib.loads(t)["ajustes"]["plan_inventario"]["ventas"], [8.0] * 12)
+
+    def test_toml_valido_para_streamlit_cloud(self):
+        # Streamlit Cloud valida con la librería `toml` antigua: no acepta listas que mezclan 9 y 9.2.
+        try:
+            import toml
+        except ImportError:
+            self.skipTest("librería toml no instalada")
+        mezcla = {**PLAN, "ventas": [5.8, 9, 9.2] + [8] * 9, "producto_terminado": [3.95, 0] + [0] * 10,
+                  "cierres_reales": [37.3, 24]}
+        datos = toml.loads(inv.a_toml(mezcla))["ajustes"]["plan_inventario"]
+        self.assertEqual(datos["ventas"][:3], [5.8, 9.0, 9.2])
+        self.assertEqual(datos["cierres_reales"], [37.3, 24.0])
 
 
 @unittest.skipUnless(__import__("importlib").util.find_spec("streamlit"), "streamlit no instalado")

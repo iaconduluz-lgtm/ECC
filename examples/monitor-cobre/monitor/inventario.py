@@ -81,12 +81,17 @@ def compras_pendientes(plan, costo_cop_t, sens=None, hoy=None):
     return out
 
 
+def _num(v):
+    """Siempre con decimal (9 -> 9.0): el validador de Streamlit Cloud rechaza listas que mezclan enteros y decimales."""
+    return repr(round(float(v), 4))
+
+
 def a_toml(plan):
     """Texto listo para pegar en los Secrets de Streamlit."""
     lineas = ["[ajustes.plan_inventario]", f"anio = {int(plan.get('anio') or date.today().year)}",
-              f"inventario_inicial = {float(plan.get('inventario_inicial') or 0):g}"]
+              f"inventario_inicial = {_num(plan.get('inventario_inicial') or 0)}"]
     for c in CAMPOS:
-        lineas.append(f"{c} = [{', '.join(f'{v:g}' for v in _lista(plan, c))}]")
+        lineas.append(f"{c} = [{', '.join(_num(v) for v in _lista(plan, c))}]")
     reales = [float(v) for v in (plan.get("cierres_reales") or [])][:12]
-    lineas.append(f"cierres_reales = [{', '.join(f'{v:g}' for v in reales)}]")
+    lineas.append(f"cierres_reales = [{', '.join(_num(v) for v in reales)}]")
     return "\n".join(lineas)
