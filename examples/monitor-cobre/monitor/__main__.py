@@ -14,9 +14,9 @@ def descargar(cfg):
     ahora = datetime.now(timezone.utc)
     datos = {"fecha": ahora.date().isoformat(),
              "fecha_hora": ahora.astimezone(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M (hora Colombia)"),
-             "serie_trm": [], "cobre": None, "errores": errores}
+             "serie_trm": [], "fuente_trm": None, "cobre": None, "errores": errores}
     try:
-        datos["serie_trm"] = trm.obtener()
+        datos["serie_trm"], datos["fuente_trm"] = trm.obtener(errores=errores)
     except Exception as e:
         errores.append(f"TRM: {e}")
     try:
@@ -33,8 +33,11 @@ def calcular(datos, cfg):
     errores = list(datos["errores"])
     serie_trm = datos["serie_trm"]
     if serie_trm:
-        ctx.update(trm=serie_trm[0][1], trm_var_semanal=costos.variacion_pct(serie_trm, 5),
+        ctx.update(trm=serie_trm[0][1], fuente_trm=datos.get("fuente_trm"), trm_var_semanal=costos.variacion_pct(serie_trm, 5),
                    serie_trm=serie_trm, contexto_trm=analisis.contexto(serie_trm))
+    trm_manual = cfg.get("trm_manual")
+    if trm_manual:
+        ctx.update(trm=float(trm_manual), fuente_trm="manual")
     serie_cu = []
     if datos["cobre"]:
         precio, serie_cu, fuente = datos["cobre"]

@@ -51,7 +51,9 @@ if secreto("ANTHROPIC_API_KEY"):
 @st.cache_data(ttl=900, show_spinner="Consultando TRM, cobre y noticias…")
 def descargar(cfg_noticias, modo_demo, marca):  # `marca` cambia al pulsar Actualizar e invalida la caché
     with demo.activar() if modo_demo else nullcontext():
-        return motor.descargar({"noticias": cfg_noticias})
+        datos = motor.descargar({"noticias": cfg_noticias})
+    datos["descargado"] = datetime.now().timestamp()
+    return datos
 
 
 def fmt(x, dec=0, pre="", suf=""):
@@ -111,6 +113,12 @@ with st.sidebar:
     manual = st.number_input("USD/t (0 = usar mercado)", 0.0, value=float(cfg["cobre"].get("precio_manual_usd_t") or 0), step=10.0)
     cfg["cobre"]["precio_manual_usd_t"] = manual or None
 
+    st.subheader("TRM del día (opcional)")
+    trm_manual = st.number_input("COP por USD (0 = automática)", 0.0, value=float(cfg.get("trm_manual") or 0), step=1.0,
+                                 help="Úsalo si la TRM automática no carga. La TRM del día está en la página de la "
+                                      "Superintendencia Financiera o en tu banco.")
+    cfg["trm_manual"] = trm_manual or None
+
 # Las ediciones de la pestaña Ajustes se aplican antes de calcular (Streamlit corre de arriba a abajo).
 COLS_PROV = ["nombre", "prima_usd_t", "flete_usd_t", "seguro_usd_t", "arancel_pct", "dias_transito"]
 tabla_prov = pd.DataFrame(cfg["proveedores"]).T[COLS_PROV]
@@ -118,12 +126,22 @@ for fila, cambios in st.session_state.get("editor_prov", {}).get("edited_rows", 
     cfg["proveedores"][tabla_prov.index[int(fila)]].update({k: float(v) for k, v in cambios.items() if k != "nombre"})
 
 datos = descargar(cfg["noticias"], modo_demo, st.session_state.get("marca"))
+# Si faltó la TRM o el cobre, no esperar 15 minutos: reintentar a los 2 minutos.
+if (not datos["serie_trm"] or not datos["cobre"]) and datetime.now().timestamp() - datos["descargado"] > 120:
+    st.session_state["marca"] = datetime.now().isoformat()
+    st.rerun()
 ctx, todas, errores = motor.calcular(datos, cfg)
 prov_actual = cfg["proveedores"][emp["proveedor_actual"]]
 
 # ======================= Encabezado =======================
 st.title("Monitor de cobre")
-st.caption(f"Última consulta: {ctx['fecha_hora']} · Cobre: {ctx.get('fuente_cobre', 's/d')}")
+st.caption(f"Última consulta: {ctx['fecha_hora']} · Cobre: {ctx.get('fuente_cobre', 's/d')} · "
+           f"TRM: {ctx.get('fuente_trm') or 's/d'}")
+if not ctx.get("trm") or not ctx.get("cobre_usd_t"):
+    st.warning("Falta " + " y ".join(x for x, ok in (("la TRM", ctx.get("trm")), ("el precio del cobre", ctx.get("cobre_usd_t")))
+                                     if not ok) + ". El tablero vuelve a intentar solo en unos 2 minutos, o pulsa "
+               "**Actualizar ahora**. Mientras tanto puedes escribir el valor en la barra lateral. "
+               "El detalle está al final de la página.")
 if modo_demo:
     st.warning("**Modo demostración:** los datos son ficticios, solo para ver cómo funciona el tablero.")
 
@@ -179,10 +197,11 @@ with t_res:
         p2.dataframe(df[["Proveedor", "COP/t", "USD/t", "dias_transito", "Estado"]], hide_index=True, width="stretch",
                      column_config={"dias_transito": "Días"})
     else:
-        falta = "el precio del cobre" if not ctx.get("cobre_usd_t") else "la TRM"
-        st.warning(f"No se puede calcular porque falta {falta}. Mientras tanto, escribe el precio LME en "
-                   "**Precio LME oficial** (barra lateral) y el cálculo aparece al instante. "
-                   "Al final de la página, en *fuentes no respondieron*, está el detalle de cada fuente.")
+        faltan = [(x, campo) for x, campo, ok in (("el precio del cobre", "Precio LME oficial", ctx.get("cobre_usd_t")),
+                                                   ("la TRM", "TRM del día", ctx.get("trm"))) if not ok]
+        st.warning("No se puede calcular porque falta " + " y ".join(x for x, _ in faltan) + ". Mientras tanto, "
+                   "escríbelo en " + " y ".join(f"**{c}**" for _, c in faltan) + " (barra lateral) y el cálculo "
+                   "aparece al instante.")
 
 # ======================= Gráficos =======================
 with t_graf:

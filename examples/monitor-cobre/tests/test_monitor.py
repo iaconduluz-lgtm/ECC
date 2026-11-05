@@ -38,6 +38,43 @@ class TestFuentes(unittest.TestCase):
         self.assertEqual(serie[0], (datetime(2026, 11, 10).date(), 4000.0))
         self.assertEqual(len(serie), 8)
 
+    def test_trm_usa_periodos_cortos_y_luego_mercado(self):
+        llamadas = []
+        def falso(url, params=None, headers=None):
+            llamadas.append((url, params))
+            if "datos.gov.co" in url and "$where" in params:
+                raise ConnectionError("503 Service Unavailable")
+            r = mock.Mock()
+            r.json.return_value = TRM_ROWS
+            return r
+        errores = []
+        with mock.patch("monitor.red.get", side_effect=falso):
+            serie, fuente = trm.obtener(errores=errores)
+        self.assertEqual(fuente, trm.OFICIAL)
+        self.assertEqual(len(llamadas), 3)  # 5 años, 1 año, 30 días
+        self.assertIn("30 días", errores[0])
+
+        def todo_falla(url, params=None, headers=None):
+            if "datos.gov.co" in url:
+                raise ConnectionError("503")
+            r = mock.Mock()
+            r.json.return_value = {"chart": {"result": [{"timestamp": [1762300800, 1762387200],
+                                   "indicators": {"quote": [{"close": [3950.5, 3961.2]}]}}]}}
+            return r
+        errores = []
+        with mock.patch("monitor.red.get", side_effect=todo_falla):
+            serie, fuente = trm.obtener(errores=errores)
+        self.assertEqual(fuente, trm.MERCADO)
+        self.assertEqual(serie[0][1], 3961.2)
+        self.assertTrue(errores)
+
+    def test_red_reintenta_errores_temporales(self):
+        from monitor import red
+        malo, bueno = mock.Mock(status_code=503), mock.Mock(status_code=200)
+        with mock.patch("requests.get", side_effect=[malo, bueno]) as g, mock.patch("time.sleep"):
+            self.assertIs(red.get("https://x"), bueno)
+        self.assertEqual(g.call_count, 2)
+
     def test_cobre_convierte_libra_a_tonelada(self):
         actual, serie = cobre.parse(YAHOO)
         self.assertAlmostEqual(actual, 4.5 * 2204.62, places=1)
