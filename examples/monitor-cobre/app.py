@@ -119,6 +119,24 @@ def linea(df, titulo, unidad, color=AZUL):
     return (base.mark_line(color=color, strokeWidth=2) + regla + puntos).properties(title=titulo, height=280)
 
 
+def secciones_secrets():
+    """Qué secciones de Secrets ve la app (solo nombres, nunca valores)."""
+    aj = secreto("ajustes") or {}
+    return [("clave_acceso", secreto("clave_acceso") is not None),
+            ("ANTHROPIC_API_KEY", secreto("ANTHROPIC_API_KEY") is not None),
+            ("[ajustes.empresa]", "empresa" in aj), ("[ajustes.proveedores]", "proveedores" in aj),
+            ("[ajustes.plan_inventario]", "plan_inventario" in aj or secreto("plan_inventario") is not None)]
+
+
+def texto_secciones():
+    secc = secciones_secrets()
+    if not any(ok for _, ok in secc):
+        return ("**La app no ve ningún Secret.** Revisa en *Manage app → ⋮ → Settings → Secrets* que el texto esté "
+                "pegado y que hayas pulsado **Save**; luego *Reboot app*.")
+    return ("**Secciones detectadas en tus Secrets** (solo los nombres, nunca los valores): "
+            + " · ".join(f"{'✅' if ok else '⬜'} `{n}`" for n, ok in secc))
+
+
 # ======================= Configuración y plan de inventario =======================
 cfg = configuracion.fusionar(configuracion.cargar(BASE), secreto("ajustes"))
 if secreto("plan_inventario") and not cfg.get("plan_inventario"):  # también se acepta sin el prefijo "ajustes."
@@ -232,6 +250,7 @@ with t_inv:
     if not TIENE_PLAN:
         st.info("Todavía no hay plan de inventario. Llena la tabla de abajo (toneladas por mes) y copia el texto "
                 "que aparece al final en *Settings → Secrets* para que quede guardado.")
+        st.markdown(texto_secciones())
     else:
         filas = ctx.get("plan") or []
         sit = ctx.get("situacion_plan")
@@ -594,14 +613,7 @@ with t_falta:
     ]
     for ok, titulo, como in pendientes:
         st.markdown(f"{'✅' if ok else '⬜'} **{titulo}**" + ("" if ok else f"  \n&nbsp;&nbsp;&nbsp;&nbsp;{como}"))
-    if EN_LA_NUBE or secreto("ajustes") is not None:
-        aj = secreto("ajustes") or {}
-        secciones = [("clave_acceso", secreto("clave_acceso") is not None),
-                     ("ANTHROPIC_API_KEY", secreto("ANTHROPIC_API_KEY") is not None),
-                     ("[ajustes.empresa]", "empresa" in aj), ("[ajustes.proveedores]", "proveedores" in aj),
-                     ("[ajustes.plan_inventario]", "plan_inventario" in aj or secreto("plan_inventario") is not None)]
-        st.markdown("**Secciones detectadas en tus Secrets** (solo los nombres, nunca los valores): "
-                    + " · ".join(f"{'✅' if ok else '⬜'} `{n}`" for n, ok in secciones))
+    st.markdown(texto_secciones())
     st.markdown("**Para decisiones aún mejores (opcional):** fecha y tamaño de tus próximos pedidos, si tus contratos "
                 "fijan precio (precio fijo o promedio LME del mes), plazo de pago en dólares, y si tienes coberturas "
                 "cambiarias con tu banco.")

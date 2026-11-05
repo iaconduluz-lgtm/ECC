@@ -71,7 +71,8 @@ def _hay(termino, texto):
 
 NIVELES = [(8, "Peligro"), (6, "Alto"), (4, "Medio"), (1, "Bajo")]
 ICONO = {"Peligro": "🔴", "Alto": "🟠", "Medio": "🟡", "Bajo": "🟢"}
-POSITIVAS = ("produccion record", "record production", "reanuda", "resume", "acuerdo", "levantan", "levanta el", "agreement", "normaliza", "restablece")
+POSITIVAS = ("produccion record", "record production", "rates to fall", "rates fall", "rates drop", "rates decline",
+             "rates ease", "fletes bajan", "bajan los fletes", "caen los fletes", "reanuda", "resume", "acuerdo", "levantan", "levanta el", "agreement", "normaliza", "restablece")
 POSIBLE = ("amenaza", "amenazan", "anuncia", "anuncian", "podria", "posible", "evalua", "evaluan", "convocan",
            "plantea", "propone", "threaten", "could", "may ", "plans to", "warns")
 HECHO = ("inicia", "inician", "en curso", "continua", "persiste", "cumple", "ongoing", "continues",
