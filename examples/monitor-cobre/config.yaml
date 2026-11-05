@@ -1,0 +1,60 @@
+# Configuración del monitor de cobre.
+# Los valores marcados AJUSTAR son estimados: reemplázalos con tus cotizaciones reales.
+
+empresa:
+  proveedor_actual: peru          # clave de la lista de proveedores de abajo
+  inventario_toneladas: 120       # AJUSTAR: cobre en bodega hoy
+  consumo_mensual_toneladas: 80   # AJUSTAR: consumo promedio de la planta
+  cobertura_minima_dias: 30       # alerta si el inventario alcanza para menos días
+
+# Costo puesto en planta = (cobre USD/t + prima + flete + seguro) x TRM x (1 + arancel)
+# Todos los montos en USD por tonelada métrica.
+proveedores:
+  peru:
+    nombre: "Perú (cátodo, vía Callao)"
+    prima_usd_t: 120      # AJUSTAR: prima sobre LME/COMEX que te cobra el proveedor
+    flete_usd_t: 85       # AJUSTAR: flete marítimo + puerto + transporte interno
+    seguro_usd_t: 10      # AJUSTAR
+    arancel_pct: 0.0      # CAN (Comunidad Andina): 0 % para cátodo de cobre (verificar con tu agente de aduana)
+    dias_transito: 12
+  chile:
+    nombre: "Chile (cátodo, vía San Antonio)"
+    prima_usd_t: 135      # AJUSTAR
+    flete_usd_t: 110      # AJUSTAR
+    seguro_usd_t: 10      # AJUSTAR
+    arancel_pct: 0.0      # TLC Colombia-Chile (verificar)
+    dias_transito: 18
+  mexico:
+    nombre: "México"
+    prima_usd_t: 150      # AJUSTAR
+    flete_usd_t: 140      # AJUSTAR
+    seguro_usd_t: 12      # AJUSTAR
+    arancel_pct: 0.0      # verificar
+    dias_transito: 20
+
+# Precio del cobre.
+# fuente "comex": futuro HG=F (Nueva York, ~15 min de retraso), se aproxima a la LME.
+# precio_manual_usd_t: si tu broker te da el precio LME oficial, ponlo aquí y se usa en lugar de COMEX.
+cobre:
+  fuente: comex
+  precio_manual_usd_t: null
+
+alertas:
+  cobre_baja_semanal_pct: -3.0    # oportunidad de compra
+  cobre_sube_semanal_pct: 5.0     # subida fuerte: considerar adelantar compra/cobertura
+  trm_variacion_semanal_pct: 2.0  # movimiento fuerte del dólar
+  noticia_riesgo_minimo: 6        # puntaje desde el que una noticia genera alerta
+  ahorro_minimo_cambio_proveedor_pct: 2.0  # alerta si otro proveedor es al menos X % más barato
+
+noticias:
+  max_horas: 48
+  google_news:
+    - "cobre Perú huelga"
+    - "cobre Perú bloqueo minero"
+    - "Las Bambas bloqueo"
+    - "corredor minero sur Perú"
+    - "puerto Callao paro"
+    - "Perú exportación cobre"
+    - "precio del cobre"
+  gdelt:
+    - '(copper OR cobre) (Peru OR Perú) (strike OR huelga OR blockade OR bloqueo OR protest OR protesta)'

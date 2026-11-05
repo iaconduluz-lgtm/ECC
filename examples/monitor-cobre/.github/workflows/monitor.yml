@@ -1,0 +1,46 @@
+# Copia este archivo a .github/workflows/ en la raíz del repositorio del monitor.
+name: Monitor de cobre
+
+on:
+  schedule:
+    # Cada hora, lunes a viernes, 7:17 a 18:17 hora Colombia (UTC-5).
+    - cron: "17 12-23 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monitor-cobre
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Pruebas
+        run: python -m unittest discover -s tests -t .
+      - name: Ejecutar monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERTA_EMAIL_DESTINO: ${{ secrets.ALERTA_EMAIL_DESTINO }}
+        run: python -m monitor
+      - name: Guardar histórico y reporte
+        run: |
+          git config user.name "monitor-cobre"
+          git config user.email "monitor-cobre@users.noreply.github.com"
+          git add data reportes
+          git diff --cached --quiet || git commit -m "chore: actualización monitor $(date -u +%F\ %H:%M)"
+          git push
