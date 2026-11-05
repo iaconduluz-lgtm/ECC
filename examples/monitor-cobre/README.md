@@ -31,6 +31,8 @@ En el tablero puedes:
   (quedan en `data/ajustes.yaml` y también los usan las alertas automáticas);
 - activar el **modo demostración** para ver cómo funciona sin internet (datos ficticios).
 
+Para verlo desde el celular, publícalo en internet siguiendo [PUBLICAR.md](PUBLICAR.md).
+
 ## Cálculo de costo
 
 ```
@@ -76,12 +78,13 @@ python -m unittest discover -s tests -t .
 
 ## Puesta en marcha automática (gratis, con GitHub Actions)
 
-1. Crea un repositorio nuevo (privado) y copia el contenido de esta carpeta en su raíz.
+1. Crea un repositorio nuevo **privado** y copia el contenido de esta carpeta en su raíz.
    El workflow `.github/workflows/monitor.yml` corre cada hora, de lunes a viernes, de 7 a. m. a 6 p. m. hora Colombia.
 2. Crea un bot de Telegram con @BotFather y obtén tu `chat_id`.
 3. En el repositorio, ve a *Settings → Secrets and variables → Actions* y agrega:
    - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
    - opcional, para correo: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `ALERTA_EMAIL_DESTINO`
+   - `MONITOR_AJUSTES`: tus costos reales en formato YAML (así no quedan en `config.yaml`)
 4. Ejecuta el workflow una vez a mano (*Actions → Monitor de cobre → Run workflow*).
 
 Cada ejecución guarda el reporte en el resumen del job y hace commit del histórico.
@@ -96,4 +99,4 @@ No se hace scraping del sitio de la LME, porque sus términos lo prohíben.
 ## Próximas fases
 
 - **Fase 2:** clasificación de noticias con IA (relevancia, gravedad y resumen diario en español).
-- **Fase 3:** publicar el tablero en internet (Streamlit Community Cloud) para verlo desde el celular.
+- **Fase 3:** alertas automáticas en un repositorio privado propio.

@@ -23,6 +23,19 @@ class TestConfiguracion(unittest.TestCase):
             self.assertEqual(cfg["proveedores"]["chile"]["prima_usd_t"], 135)
 
 
+class TestSecretos(unittest.TestCase):
+    def test_ajustes_por_variable_de_entorno(self):
+        with mock.patch.dict(os.environ, {"MONITOR_AJUSTES": "proveedores:\n  peru:\n    prima_usd_t: 99\n"}):
+            cfg = configuracion.cargar(BASE)
+        self.assertEqual(cfg["proveedores"]["peru"]["prima_usd_t"], 99)
+        self.assertEqual(cfg["proveedores"]["peru"]["flete_usd_t"], 85)
+
+    def test_fusionar_no_modifica_original(self):
+        base = {"a": {"b": 1, "c": 2}}
+        self.assertEqual(configuracion.fusionar(base, {"a": {"b": 5}}), {"a": {"b": 5, "c": 2}})
+        self.assertEqual(base["a"]["b"], 1)
+
+
 class TestDemo(unittest.TestCase):
     def test_modo_demo_completo_y_sin_escribir_archivos(self):
         with tempfile.TemporaryDirectory() as tmp, demo.activar():
@@ -42,6 +55,19 @@ class TestTablero(unittest.TestCase):
             at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60).run()
         self.assertEqual(len(at.exception), 0)
         self.assertEqual(at.title[0].value, "Monitor de cobre")
+        self.assertEqual(len(at.metric), 4)
+
+    def test_clave_de_acceso_bloquea_el_tablero(self):
+        from streamlit.testing.v1 import AppTest
+        at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60)
+        at.secrets["clave_acceso"] = "secreta"
+        at.run()
+        self.assertEqual(len(at.metric), 0)  # sin clave no se ve nada
+        at.text_input[0].input("mala").run()
+        self.assertEqual(len(at.metric), 0)
+        self.assertEqual(at.error[0].value, "Clave incorrecta.")
+        with mock.patch.dict(os.environ, {"MONITOR_DEMO": "1"}):
+            at.text_input[0].input("secreta").run()
         self.assertEqual(len(at.metric), 4)
 
 

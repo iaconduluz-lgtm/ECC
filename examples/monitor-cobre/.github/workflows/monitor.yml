@@ -1,4 +1,5 @@
-# Copia este archivo a .github/workflows/ en la raíz del repositorio del monitor.
+# Copia este archivo a .github/workflows/ en la raíz de un repositorio PRIVADO del monitor
+# (en un repositorio público los reportes y el histórico quedarían visibles para todos).
 name: Monitor de cobre
 
 on:
@@ -36,6 +37,7 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           ALERTA_EMAIL_DESTINO: ${{ secrets.ALERTA_EMAIL_DESTINO }}
+          MONITOR_AJUSTES: ${{ secrets.MONITOR_AJUSTES }}
         run: python -m monitor
       - name: Guardar histórico y reporte
         run: |

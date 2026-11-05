@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from . import alertas, cobre, configuracion, costos, estado, noticias, reporte, trm
 
@@ -10,7 +11,7 @@ from . import alertas, cobre, configuracion, costos, estado, noticias, reporte, 
 def ejecutar(cfg, base, enviar=True, guardar=True):
     errores = []
     ahora = datetime.now(timezone.utc)
-    ctx = {"fecha": ahora.date().isoformat(), "fecha_hora": ahora.strftime("%Y-%m-%d %H:%M UTC")}
+    ctx = {"fecha": ahora.date().isoformat(), "fecha_hora": ahora.astimezone(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M (hora Colombia)")}
 
     try:
         serie_trm = trm.obtener()

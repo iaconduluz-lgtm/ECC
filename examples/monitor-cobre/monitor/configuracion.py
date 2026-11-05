@@ -5,10 +5,12 @@ import os
 import yaml
 
 
-def _fusionar(base, cambios):
+def fusionar(base, cambios):
+    """Mezcla `cambios` sobre `base` (recursivo) sin modificar los originales."""
     out = copy.deepcopy(base)
-    for k, v in (cambios or {}).items():
-        out[k] = _fusionar(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    for k, v in dict(cambios or {}).items():
+        v = dict(v) if hasattr(v, "keys") else v  # los secrets de Streamlit no son dict puros
+        out[k] = fusionar(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
     return out
 
 
@@ -21,9 +23,12 @@ def cargar(base, ruta_config=None):
         cfg = yaml.safe_load(f)
     try:
         with open(ruta_ajustes(base), encoding="utf-8") as f:
-            cfg = _fusionar(cfg, yaml.safe_load(f))
+            cfg = fusionar(cfg, yaml.safe_load(f))
     except OSError:
         pass
+    # En GitHub Actions los costos reales llegan por el secret MONITOR_AJUSTES (texto YAML).
+    if os.environ.get("MONITOR_AJUSTES"):
+        cfg = fusionar(cfg, yaml.safe_load(os.environ["MONITOR_AJUSTES"]))
     return cfg
 
 

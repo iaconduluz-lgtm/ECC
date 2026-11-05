@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .env
 .venv/
+# Datos privados de la empresa: nunca al repositorio
+data/ajustes.yaml
+.streamlit/secrets.toml

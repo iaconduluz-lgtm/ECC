@@ -1,4 +1,5 @@
 """Tablero del monitor de cobre.  Ejecutar:  streamlit run app.py"""
+import hmac
 import os
 from contextlib import nullcontext
 from datetime import datetime
@@ -17,8 +18,34 @@ NIVEL = {"URGENTE": st.error, "RIESGO SUMINISTRO": st.error, "ATENCION": st.warn
 st.set_page_config(page_title="Monitor de cobre", page_icon="🟠", layout="wide")
 
 
+def secreto(clave, defecto=None):
+    """Lee .streamlit/secrets.toml (local) o los Secrets de Streamlit Cloud; tolera que no existan."""
+    try:
+        return st.secrets[clave] if clave in st.secrets else defecto
+    except Exception:
+        return defecto
+
+
+def pedir_clave():
+    """Si hay `clave_acceso` en los secrets, pide la clave antes de mostrar nada."""
+    esperada = secreto("clave_acceso")
+    if not esperada or st.session_state.get("autorizado"):
+        return
+    st.title("Monitor de cobre")
+    intento = st.text_input("Clave de acceso", type="password")
+    if intento and hmac.compare_digest(intento.encode(), str(esperada).encode()):
+        st.session_state["autorizado"] = True
+        st.rerun()
+    if intento:
+        st.error("Clave incorrecta.")
+    st.stop()
+
+
+pedir_clave()
+
+
 @st.cache_data(ttl=900, show_spinner="Consultando TRM, cobre y noticias…")
-def consultar(cfg, modo_demo, _marca):
+def consultar(cfg, modo_demo, marca):  # `marca` cambia al pulsar Actualizar e invalida la caché
     with demo.activar() if modo_demo else nullcontext():
         ctx, todas, _, errores, _ = motor.ejecutar(cfg, BASE, enviar=False, guardar=False)
     return ctx, todas, errores
@@ -47,7 +74,8 @@ def linea(serie, titulo, unidad):
 
 
 # ---------------- Barra lateral: controles ----------------
-cfg = configuracion.cargar(BASE)
+cfg = configuracion.fusionar(configuracion.cargar(BASE), secreto("ajustes"))
+EN_LA_NUBE = secreto("ajustes") is not None or secreto("clave_acceso") is not None
 with st.sidebar:
     st.header("Controles")
     modo_demo = st.toggle("Modo demostración (datos ficticios)", value=os.environ.get("MONITOR_DEMO") == "1",
@@ -75,8 +103,12 @@ with st.expander("✏️ Ajustar costos por proveedor (USD por tonelada)"):
                                             "seguro_usd_t": "Seguro", "arancel_pct": "Arancel %", "dias_transito": "Días tránsito"})
     for clave, fila in editada.iterrows():
         cfg["proveedores"][clave].update({k: float(fila[k]) for k in editada.columns if k != "nombre"})
-    st.caption("Cambia los valores y presiona Guardar para que las alertas automáticas también los usen.")
-    if st.button("💾 Guardar mis valores"):
+    if EN_LA_NUBE:
+        st.caption("Versión en internet: los cambios sirven para simular. Para dejarlos fijos, cámbialos en "
+                   "*Settings → Secrets* de Streamlit Cloud (sección `[ajustes]`).")
+    else:
+        st.caption("Cambia los valores y presiona Guardar para que las alertas automáticas también los usen.")
+    if not EN_LA_NUBE and st.button("💾 Guardar mis valores"):
         configuracion.guardar_ajustes(BASE, {"empresa": emp, "cobre": cfg["cobre"], "proveedores": cfg["proveedores"]})
         st.success("Guardado en data/ajustes.yaml.")
 
