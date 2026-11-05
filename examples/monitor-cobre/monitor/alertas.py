@@ -37,9 +37,13 @@ def evaluar(ctx, cfg):
                     "texto": f"Inventario alcanza para {cob} días (mínimo {cfg['empresa']['cobertura_minima_dias']}). Reponer."})
 
     for n in ctx.get("noticias", []):
-        if n["riesgo"] >= a["noticia_riesgo_minimo"]:
-            out.append({"id": f"news-{n['id']}", "nivel": "RIESGO SUMINISTRO",
-                        "texto": f"[{n['riesgo']}/10] {n['titulo']}\n{n['url']}"})
+        # Alto/Peligro siempre; si menciona a tu proveedor directo, desde Medio.
+        minimo = 4 if n.get("afecta_proveedor") else a["noticia_riesgo_minimo"]
+        if n["riesgo"] >= minimo:
+            nivel = "PELIGRO" if n["riesgo"] >= 8 else ("RIESGO ALTO" if n["riesgo"] >= 6 else "RIESGO MEDIO")
+            marca = "TU PROVEEDOR · " if n.get("afecta_proveedor") else ""
+            out.append({"id": f"news-{n['id']}", "nivel": nivel,
+                        "texto": f"{marca}[{n.get('nivel', '')} {n['riesgo']}/10] {n['titulo']}\n{n['url']}"})
     return out
 
 

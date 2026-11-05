@@ -67,6 +67,8 @@ CATEGORIAS = [
 
 
 def clasificar(noticia):
+    if noticia.get("afecta_proveedor"):
+        return "Tu proveedor directo", "Afecta directamente a quien te vende: revisa tus pedidos y embarques."
     t = normalizar(noticia["titulo"])
     for nombre, claves, impacto in CATEGORIAS:
         if any(c in t for c in claves):
@@ -122,8 +124,17 @@ def recomendacion(ctx, cfg):
             puntos -= 1
             razones.append(f"El dólar (TRM) está {v:.1f} % por encima de su promedio de 3 meses: pagar en USD sale más caro.")
 
-    riesgo_peru = [n for n in ctx.get("noticias", []) if n["riesgo"] >= cfg["alertas"]["noticia_riesgo_minimo"]
-                   and clasificar(n)[0] in ("Suministro Perú", "Logística / puertos")]
+    noticias = ctx.get("noticias", [])
+    peligro_prov = [n for n in noticias if n.get("afecta_proveedor") and n["riesgo"] >= 8]
+    riesgo_peru = [n for n in noticias if (n["riesgo"] >= cfg["alertas"]["noticia_riesgo_minimo"]
+                   and clasificar(n)[0] in ("Suministro Perú", "Logística / puertos", "Tu proveedor directo"))
+                   or (n.get("afecta_proveedor") and n["riesgo"] >= 4)]
+    if peligro_prov:
+        return {"accion": "Asegurar el suministro: activar un proveedor alternativo", "tono": "urgente",
+                "diversificar": True,
+                "razones": [f"PELIGRO en tu proveedor directo: {peligro_prov[0]['titulo']}",
+                            "Confirma hoy con tu proveedor el estado de tus pedidos y embarques.",
+                            "Cotiza con un proveedor alternativo y revisa cuántos días de inventario te quedan."] + razones}
     if riesgo_peru:
         puntos += 1
         razones.append(f"{len(riesgo_peru)} noticia(s) de riesgo alto para el suministro desde Perú: "

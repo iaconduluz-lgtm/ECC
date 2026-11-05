@@ -14,6 +14,7 @@ MODELO = "claude-opus-5-5"
 
 class NoticiaClave(BaseModel):
     titulo: str
+    nivel: Literal["Bajo", "Medio", "Alto", "Peligro"]
     por_que_importa: str
     efecto_precio: Literal["sube", "baja", "neutral", "incierto"]
     afecta_suministro_peru: bool
@@ -41,9 +42,13 @@ ESQUEMA = {
         "riesgo_suministro_peru": {"type": "string", "enum": ["bajo", "medio", "alto"]},
         "noticias_clave": {"type": "array", "items": {
             "type": "object", "additionalProperties": False,
-            "required": ["titulo", "por_que_importa", "efecto_precio", "afecta_suministro_peru"],
+            "required": ["titulo", "nivel", "por_que_importa", "efecto_precio", "afecta_suministro_peru"],
             "properties": {
                 "titulo": {"type": "string"},
+                "nivel": {"type": "string", "enum": ["Bajo", "Medio", "Alto", "Peligro"],
+                          "description": "Bajo: sin problema de suministro. Medio: posible problema aún no confirmado. "
+                                         "Alto: problema activo que puede afectar envíos. Peligro: interrupción grave, "
+                                         "prolongada o que afecta al proveedor directo."},
                 "por_que_importa": {"type": "string"},
                 "efecto_precio": {"type": "string", "enum": ["sube", "baja", "neutral", "incierto"]},
                 "afecta_suministro_peru": {"type": "boolean"},
@@ -57,8 +62,9 @@ ESQUEMA = {
 }
 
 SISTEMA = (
-    "Eres analista de compras de materias primas de una empresa colombiana que importa cátodo de cobre, "
-    "principalmente de Perú, y lo transforma en cables. Paga en dólares, así que le afectan el precio del cobre "
+    "Eres analista de compras de materias primas de una empresa colombiana que compra cobre en Perú, casi todo a un "
+    "único proveedor (indicado en los datos como proveedor_directo), y lo transforma en cables. Cualquier problema de "
+    "ese proveedor (huelga, incendio, paro, problemas financieros, logística en Lima/Callao) es el riesgo más importante. Paga en dólares, así que le afectan el precio del cobre "
     "(LME/COMEX) y la TRM. Analiza las noticias y los datos que te dan. Sé concreto y práctico, en español sencillo, "
     "y usa las cifras de impacto que te entregan en lugar de inventar otras. Si una noticia no es relevante, ignórala. "
     "Si los datos no alcanzan para una conclusión, dilo. Tus recomendaciones son de apoyo: la decisión final es del equipo."
@@ -78,6 +84,7 @@ def _datos(ctx, cfg, sens, recomendacion_reglas):
         "cobre_usd_t_hoy": ctx.get("cobre_usd_t"), "cobre_fuente": ctx.get("fuente_cobre"),
         "cobre_var_semanal_pct": ctx.get("cobre_var_semanal"), "cobre_contexto": ctx.get("contexto_cobre"),
         "proveedor_actual": prov.get("nombre"),
+        "proveedor_directo": (cfg.get("noticias") or {}).get("proveedor_claves", []),
         "costo_por_proveedor": [{k: r[k] for k in ("nombre", "usd_t", "cop_t", "dias_transito")}
                                 for r in ctx.get("ranking") or []],
         "inventario_dias": ctx.get("cobertura_dias"),
@@ -88,6 +95,7 @@ def _datos(ctx, cfg, sens, recomendacion_reglas):
         },
         "recomendacion_por_reglas": recomendacion_reglas,
         "noticias": [{"titulo": n["titulo"], "fuente": n.get("fuente"), "riesgo_reglas": n["riesgo"],
+                      "nivel_reglas": n.get("nivel"), "menciona_proveedor_directo": n.get("afecta_proveedor", False),
                       "fecha": n["fecha"].isoformat() if n.get("fecha") else None}
                      for n in (ctx.get("noticias") or [])[:25]],
     }

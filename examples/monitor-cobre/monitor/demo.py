@@ -11,6 +11,8 @@ NOTICIAS_DEMO = [
     "Perú evalúa nuevo impuesto a las exportaciones mineras",
     "Precio del cobre sube por menores inventarios en bolsas",
     "Antamina reporta producción récord de cobre en el trimestre",
+    "Trabajadores de Elcope amenazan con huelga por negociación salarial",
+    "Comunidades levantan el bloqueo en Cuajone tras 12 días",
 ]
 
 

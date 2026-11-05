@@ -21,6 +21,8 @@ EVENTOS = {
     "escasez": 3, "shortage": 3, "disruption": 3, "interrupcion": 3, "outage": 3, "landslide": 3,
     "deslizamiento": 3, "huaico": 3, "export ban": 4, "prohibe": 2, "aranceles": 2, "tariffs": 2,
     "impuesto a las exportaciones": 3, "export tax": 3,
+    "retrasa": 2, "retraso": 2, "delay": 2, "incendio": 4, "fire": 3, "explosion": 4, "paraliza": 3,
+    "detiene": 3, "cierra": 3, "indefinid": 1, "quiebra": 5, "bankruptcy": 5, "insolvencia": 5, "falta de": 2,
     # señales que bajan el riesgo (buenas noticias para el suministro)
     "record": -2, "reanuda": -3, "resume": -3, "acuerdo": -2, "levantan": -2, "levanta el": -2, "agreement": -2,
 }
@@ -43,15 +45,61 @@ def _hay(termino, texto):
     return re.search(r"\b" + termino, texto) is not None
 
 
-def puntaje(titulo):
-    """Puntaje de riesgo 0-10. Cero si no trata de cobre/minería; 1 si trata del tema sin señales de riesgo."""
+NIVELES = [(8, "Peligro"), (6, "Alto"), (4, "Medio"), (1, "Bajo")]
+ICONO = {"Peligro": "🔴", "Alto": "🟠", "Medio": "🟡", "Bajo": "🟢"}
+POSITIVAS = ("record", "reanuda", "resume", "acuerdo", "levantan", "levanta el", "agreement", "normaliza", "restablece")
+POSIBLE = ("amenaza", "amenazan", "anuncia", "anuncian", "podria", "posible", "evalua", "evaluan", "convocan",
+           "plantea", "propone", "threaten", "could", "may ", "plans to", "warns")
+HECHO = ("inicia", "inician", "en curso", "continua", "persiste", "cumple", "ongoing", "continues",
+         "enters", "segundo dia", "tercer dia", "paraliza", "detiene", "suspende")
+
+
+def nivel(riesgo):
+    """1-3 Bajo, 4-5 Medio, 6-7 Alto, 8-10 Peligro (0 = no relevante)."""
+    return next((n for minimo, n in NIVELES if riesgo >= minimo), "")
+
+
+def evaluar(titulo, proveedor=()):
+    """Clasifica un titular: riesgo 0-10, nivel, certeza, duración y si menciona a tu proveedor directo."""
     t = normalizar(titulo)
+    del_proveedor = any(_hay(re.escape(normalizar(k)), t) for k in proveedor)
     activos = [k for k in ACTIVOS if _hay(re.escape(k), t)]
-    if not activos and not any(_hay(k, t) for k in TEMA):
-        return 0, []
+    if not del_proveedor and not activos and not any(_hay(k, t) for k in TEMA):
+        return {"riesgo": 0, "nivel": "", "terminos": [], "afecta_proveedor": False, "certeza": "", "duracion_dias": None}
     eventos = [k for k in EVENTOS if _hay(re.escape(k), t)]
     total = sum(EVENTOS[k] for k in eventos) + sum(ACTIVOS[k] for k in activos)
-    return max(1, min(total, 10)), eventos + activos
+    hay_problema = any(EVENTOS[k] > 0 for k in eventos)
+    if del_proveedor and hay_problema:
+        total += 4  # tu proveedor directo (casi único) pesa más que cualquier otra mina
+    positiva = any(_hay(re.escape(k), t) for k in POSITIVAS)
+    posible = any(_hay(re.escape(k), t) for k in POSIBLE)
+    hecho = any(_hay(re.escape(k), t) for k in HECHO)
+    m = re.search(r"(\d+)\s*(dias|days|semanas|weeks)", t)
+    dias = (int(m.group(1)) * (7 if m.group(2) in ("semanas", "weeks") else 1)) if m else None
+    if positiva:
+        total = min(total, 3)  # p. ej. "levantan el bloqueo tras 15 días": buena noticia
+    else:
+        if hecho and hay_problema:
+            total += 1
+        if dias and hay_problema:
+            total += 2 if dias >= 7 else 1
+        if posible and not hecho:
+            total = min(total, 5)  # una amenaza o propuesta todavía no es un hecho: máximo Medio
+    riesgo = max(1, min(total, 10))
+    if positiva:
+        certeza = "Buena noticia"
+    elif riesgo < 4:
+        certeza = ""  # sin problema relevante
+    else:
+        certeza = "Posible" if posible and not hecho else "Hecho"
+    return {"riesgo": riesgo, "nivel": nivel(riesgo), "terminos": eventos + activos, "afecta_proveedor": del_proveedor,
+            "certeza": certeza, "duracion_dias": dias}
+
+
+def puntaje(titulo, proveedor=()):
+    """Atajo: (riesgo 0-10, términos encontrados)."""
+    e = evaluar(titulo, proveedor)
+    return e["riesgo"], e["terminos"]
 
 
 def _id(url, titulo):
@@ -99,7 +147,7 @@ def _buscar_gdelt(q):
     return parse_gdelt(red.get(GDELT, params=params).json())
 
 
-def filtrar(items, max_horas, ahora=None):
+def filtrar(items, max_horas, ahora=None, proveedor=()):
     """Deduplica, descarta noticias viejas, calcula puntaje y ordena por riesgo."""
     ahora = ahora or datetime.now(timezone.utc)
     limite = ahora - timedelta(hours=max_horas)
@@ -112,11 +160,11 @@ def filtrar(items, max_horas, ahora=None):
         vistos.update({nid, clave_titulo})
         if it["fecha"] and it["fecha"] < limite:
             continue
-        p, terminos = puntaje(it["titulo"])
-        if p == 0:
+        e = evaluar(it["titulo"], proveedor)
+        if e["riesgo"] == 0:
             continue
-        out.append({**it, "id": nid, "riesgo": p, "terminos": terminos})
-    out.sort(key=lambda x: x["riesgo"], reverse=True)
+        out.append({**it, "id": nid, **e})
+    out.sort(key=lambda x: (x["afecta_proveedor"] and x["riesgo"] >= 4, x["riesgo"]), reverse=True)
     return out
 
 
@@ -136,4 +184,4 @@ def obtener(config, errores):
             errores.append("GDELT: respuesta no válida (suele ser límite de consultas; se reintenta en la próxima)")
         except Exception as e:
             errores.append(f"GDELT: {e}")
-    return filtrar(items, config.get("max_horas", 72))
+    return filtrar(items, config.get("max_horas", 72), proveedor=config.get("proveedor_claves", []))

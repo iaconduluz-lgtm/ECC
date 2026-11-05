@@ -71,7 +71,7 @@ Las primas, fletes, seguros y aranceles se configuran por proveedor en `config.y
 | OPORTUNIDAD | El cobre baja más de 3 % en la semana, o otro proveedor sale al menos 2 % más barato |
 | ATENCION | El cobre sube más de 5 % en la semana, o la TRM se mueve más de 2 % |
 | URGENTE | El inventario alcanza para menos de 30 días |
-| RIESGO SUMINISTRO | Noticia con puntaje de riesgo ≥ 6/10 (p. ej. bloqueo en Las Bambas, huelga en Cerro Verde, paro en el Callao) |
+| RIESGO ALTO / PELIGRO | Noticia de nivel Alto (6-7) o Peligro (8-10); si menciona a tu proveedor (Elcope), desde Medio (4-5) |
 
 Todos los umbrales se cambian en `config.yaml`. Cada alerta se envía una sola vez
 (registro en `data/alertas_enviadas.json`).

@@ -193,7 +193,7 @@ class TestAlertas(unittest.TestCase):
         niveles = [a["nivel"] for a in alertas.evaluar(ctx, c)]
         self.assertIn("OPORTUNIDAD", niveles)
         self.assertIn("URGENTE", niveles)
-        self.assertIn("RIESGO SUMINISTRO", niveles)
+        self.assertIn("PELIGRO", niveles)
         self.assertEqual(niveles.count("ATENCION"), 1)
 
     def test_sin_credenciales_no_envia(self):

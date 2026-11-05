@@ -10,8 +10,8 @@ empresa:
 # Costo puesto en planta = (cobre USD/t + prima + flete + seguro) x TRM x (1 + arancel)
 # Todos los montos en USD por tonelada métrica.
 proveedores:
-  peru:
-    nombre: "Perú (cátodo, vía Callao)"
+  peru:                   # clave interna (no cambiar: la usan tus Secrets)
+    nombre: "Elcope (Perú, vía Callao)"
     prima_usd_t: 120      # AJUSTAR: prima sobre LME/COMEX que te cobra el proveedor
     flete_usd_t: 85       # AJUSTAR: flete marítimo + puerto + transporte interno
     seguro_usd_t: 10      # AJUSTAR
@@ -48,7 +48,14 @@ alertas:
 
 noticias:
   max_horas: 72          # noticias de los últimos 3 días
+  # Nombres de tu proveedor directo: cualquier noticia que lo mencione sube de nivel.
+  proveedor_claves:
+    - "Elcope"
+    - "Electro Conductores Peruanos"
+    - "Electroconductores Peruanos"
   google_news:           # búsquedas en español (Perú)
+    - "Elcope"
+    - "Electro Conductores Peruanos"
     - "cobre Perú"
     - "minería Perú huelga OR paro OR bloqueo"
     - "Las Bambas"

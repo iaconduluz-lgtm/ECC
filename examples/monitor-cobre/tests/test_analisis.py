@@ -83,6 +83,59 @@ class TestRecomendacion(unittest.TestCase):
         self.assertEqual(analisis.recomendacion(self.base_ctx(), cfg())["tono"], "normal")
 
 
+class TestNiveles(unittest.TestCase):
+    PROV = ["Elcope", "Electro Conductores Peruanos"]
+
+    def nivel(self, titulo):
+        from monitor import noticias
+        return noticias.evaluar(titulo, self.PROV)
+
+    def test_escala(self):
+        from monitor import noticias
+        self.assertEqual([noticias.nivel(x) for x in (1, 3, 4, 5, 6, 7, 8, 10)],
+                         ["Bajo", "Bajo", "Medio", "Medio", "Alto", "Alto", "Peligro", "Peligro"])
+
+    def test_casos(self):
+        casos = {
+            "El precio del cobre se mantiene estable": "Bajo",
+            "Antamina reporta producción récord de cobre": "Bajo",
+            "Trabajadores amenazan con huelga en Cerro Verde": "Medio",     # amenaza: máximo Medio
+            "Perú evalúa nuevo impuesto a las exportaciones mineras": "Medio",
+            "Paro portuario en el Callao retrasa embarques": "Alto",
+            "Inicia huelga indefinida en Cerro Verde": "Peligro",
+            "Sindicato de Cerro Verde anuncia huelga indefinida desde el lunes": "Medio",  # anuncio, aún no hecho
+            "Bloqueo en corredor minero sur cumple 10 días": "Peligro",      # duración
+            "Comunidades levantan el bloqueo del corredor minero tras 15 días": "Bajo",  # buena noticia
+            "Incendio en planta de Elcope paraliza producción": "Peligro",   # proveedor directo
+            "Huelga en Electro Conductores Peruanos": "Peligro",
+            "Trabajadores de Elcope amenazan con huelga": "Medio",
+        }
+        for titulo, esperado in casos.items():
+            self.assertEqual(self.nivel(titulo)["nivel"], esperado, titulo)
+
+    def test_proveedor_y_certeza(self):
+        e = self.nivel("Elcope amplía su planta en Lima")
+        self.assertTrue(e["afecta_proveedor"])
+        self.assertEqual(e["nivel"], "Bajo")
+        self.assertEqual(self.nivel("Trabajadores amenazan con huelga en Cerro Verde")["certeza"], "Posible")
+        self.assertEqual(self.nivel("Bloqueo en corredor minero sur cumple 10 días")["duracion_dias"], 10)
+
+    def test_alerta_desde_medio_si_es_tu_proveedor(self):
+        from monitor import alertas
+        base = {"fecha": "x", "ranking": [], "cobertura_dias": 45}
+        prov = {"id": "a", "riesgo": 5, "nivel": "Medio", "afecta_proveedor": True, "titulo": "Elcope amenaza", "url": "u"}
+        otra = {"id": "b", "riesgo": 5, "nivel": "Medio", "afecta_proveedor": False, "titulo": "Otra", "url": "u"}
+        out = alertas.evaluar({**base, "noticias": [prov, otra]}, cfg())
+        self.assertEqual([a["id"] for a in out], ["news-a"])
+        self.assertIn("TU PROVEEDOR", out[0]["texto"])
+
+    def test_peligro_en_proveedor_es_urgente(self):
+        n = {"titulo": "Incendio en planta de Elcope", "riesgo": 9, "afecta_proveedor": True}
+        r = analisis.recomendacion({"noticias": [n], "cobertura_dias": 45}, cfg())
+        self.assertEqual(r["tono"], "urgente")
+        self.assertIn("proveedor alternativo", r["accion"])
+
+
 class TestClasificacion(unittest.TestCase):
     def test_categorias(self):
         self.assertEqual(analisis.clasificar({"titulo": "Huelga en Cerro Verde"})[0], "Suministro Perú")
@@ -96,7 +149,7 @@ class TestClasificacion(unittest.TestCase):
 
 RESPUESTA = {
     "resumen": "Mercado estable.", "presion_precio_cobre": "alcista", "riesgo_suministro_peru": "medio",
-    "noticias_clave": [{"titulo": "t", "por_que_importa": "p", "efecto_precio": "sube", "afecta_suministro_peru": True}],
+    "noticias_clave": [{"titulo": "t", "nivel": "Alto", "por_que_importa": "p", "efecto_precio": "sube", "afecta_suministro_peru": True}],
     "si_sube_cobre": "a", "si_sube_trm": "b", "recomendacion": "Comprar lo normal.", "acciones": ["x"],
     "proveedores_alternativos": "c",
 }

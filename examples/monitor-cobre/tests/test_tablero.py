@@ -43,7 +43,7 @@ class TestDemo(unittest.TestCase):
             self.assertEqual(errores, [])
             self.assertGreater(len(ctx["serie_trm"]), 1500)
             self.assertGreater(len(ctx["serie_cobre"]), 1000)
-            self.assertTrue(any(a["nivel"] == "RIESGO SUMINISTRO" for a in todas))
+            self.assertTrue(any(a["nivel"] == "PELIGRO" for a in todas))
             self.assertEqual(os.listdir(tmp), [])
 
 
@@ -55,7 +55,7 @@ class TestTablero(unittest.TestCase):
             at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60).run()
         self.assertEqual(len(at.exception), 0)
         self.assertEqual(at.title[0].value, "Monitor de cobre")
-        self.assertEqual(len(at.metric), 9)
+        self.assertEqual(len(at.metric), 13)
 
     def test_pestanas_y_simulador(self):
         from streamlit.testing.v1 import AppTest
@@ -85,7 +85,7 @@ class TestTablero(unittest.TestCase):
         self.assertEqual(at.error[0].value, "Clave incorrecta.")
         with mock.patch.dict(os.environ, {"MONITOR_DEMO": "1"}):
             at.text_input[0].input("secreta").run()
-        self.assertEqual(len(at.metric), 9)
+        self.assertEqual(len(at.metric), 13)
 
 
 if __name__ == "__main__":

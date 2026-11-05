@@ -11,10 +11,13 @@ import streamlit as st
 
 from monitor import __main__ as motor
 from monitor import analisis, configuracion, costos, demo, ia
+from monitor.noticias import ICONO
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 AZUL, ROJO, GRIS, TINTA2 = "#2a78d6", "#e34948", "#f0efec", "#52514e"
-NIVEL = {"URGENTE": st.error, "RIESGO SUMINISTRO": st.error, "ATENCION": st.warning, "OPORTUNIDAD": st.success}
+NIVEL = {"URGENTE": st.error, "PELIGRO": st.error, "RIESGO ALTO": st.warning, "RIESGO MEDIO": st.info,
+         "ATENCION": st.warning, "OPORTUNIDAD": st.success}
+ORDEN_NIVELES = ["Peligro", "Alto", "Medio", "Bajo"]
 TONO = {"urgente": st.error, "comprar": st.success, "esperar": st.warning, "normal": st.info}
 
 st.set_page_config(page_title="Monitor de cobre", page_icon="🟠", layout="wide")
@@ -332,6 +335,21 @@ with t_esc:
 # ======================= Noticias e IA =======================
 with t_not:
     noticias = ctx.get("noticias") or []
+    st.subheader("Nivel de riesgo de las noticias")
+    cols = st.columns(4)
+    for col, nv in zip(cols, ORDEN_NIVELES):
+        col.metric(f"{ICONO[nv]} {nv}", sum(1 for n in noticias if n.get("nivel") == nv))
+    with st.expander("¿Qué significa cada nivel?"):
+        st.markdown(
+            "| Nivel | Puntaje | Significa | Qué hacer |\n|---|---|---|---|\n"
+            "| 🟢 Bajo | 1–3 | Noticia del sector sin problema de suministro (o buena noticia) | Solo informativo |\n"
+            "| 🟡 Medio | 4–5 | Posible problema aún no confirmado: amenaza de huelga, propuesta de impuesto | Vigilar; preguntar al proveedor |\n"
+            "| 🟠 Alto | 6–7 | Problema activo que puede afectar envíos: huelga, bloqueo, paro en puerto | Confirmar tu embarque; cotizar alternativo |\n"
+            "| 🔴 Peligro | 8–10 | Interrupción grave o prolongada, o problema serio en tu proveedor | Activar proveedor alternativo; asegurar inventario |\n\n"
+            "Suben el nivel: que mencione a **tu proveedor** (Elcope), que sea un **hecho** (\"inicia\", \"paraliza\") y "
+            "que dure **varios días**. Lo bajan: que sea solo una **amenaza o propuesta** (máximo Medio) o una "
+            "**buena noticia** (\"levantan el bloqueo\", \"reanuda\"). Las noticias de tu proveedor generan alerta desde Medio.")
+
     st.subheader("Análisis automático de noticias")
     grupos = analisis.resumen_noticias(noticias)
     if grupos:
@@ -370,7 +388,8 @@ with t_not:
             st.markdown(f"**Proveedores alternativos:** {r.proveedores_alternativos}")
             if r.noticias_clave:
                 st.dataframe(pd.DataFrame([n.model_dump() for n in r.noticias_clave]), hide_index=True, width="stretch",
-                             column_config={"titulo": "Noticia", "por_que_importa": st.column_config.TextColumn("Por qué importa", width="large"),
+                             column_config={"titulo": "Noticia", "nivel": "Nivel (IA)",
+                                            "por_que_importa": st.column_config.TextColumn("Por qué importa", width="large"),
                                             "efecto_precio": "Precio", "afecta_suministro_peru": "¿Afecta Perú?"})
             st.caption("Análisis generado por IA: puede equivocarse. Verifica las noticias antes de decidir.")
 
@@ -378,17 +397,24 @@ with t_not:
     if noticias:
         dfn = pd.DataFrame(noticias)
         dfn["Tema"] = [analisis.clasificar(n)[0] for n in noticias]
-        orden_n = st.radio("Ordenar", ["Mayor riesgo primero", "Más recientes primero"], horizontal=True,
-                           label_visibility="collapsed")
+        dfn["Nivel"] = dfn["nivel"].map(lambda nv: f"{ICONO.get(nv, '')} {nv}")
+        dfn["Proveedor"] = dfn["afecta_proveedor"].map(lambda x: "⚠️ Sí" if x else "")
+        f1, f2 = st.columns([2, 3])
+        ver_niveles = f1.multiselect("Mostrar niveles", ORDEN_NIVELES, default=ORDEN_NIVELES,
+                                     format_func=lambda nv: f"{ICONO[nv]} {nv}")
+        with f2:
+            orden_n = st.radio("Ordenar", ["Mayor riesgo primero", "Más recientes primero"], horizontal=True)
+        dfn = dfn[dfn["nivel"].isin(ver_niveles)]
         if orden_n == "Más recientes primero":
             dfn = dfn.sort_values("fecha", ascending=False, na_position="last")
         dfn["Fecha"] = dfn["fecha"].map(lambda d: d.astimezone(ZoneInfo("America/Bogota")).strftime("%d %b %H:%M")
                                         if d is not None and not pd.isna(d) else "")
         st.caption(f"{len(dfn)} noticias de los últimos {round(cfg['noticias'].get('max_horas', 72) / 24)} días. "
-                   "Riesgo 1/10 = habla de cobre o minería sin señales de problema.")
-        st.dataframe(dfn[["riesgo", "Tema", "titulo", "fuente", "Fecha", "url"]], hide_index=True, width="stretch",
+                   "Proveedor = la noticia menciona a tu proveedor directo.")
+        st.dataframe(dfn[["Nivel", "riesgo", "Proveedor", "certeza", "Tema", "titulo", "fuente", "Fecha", "url"]],
+                     hide_index=True, width="stretch",
                      column_config={"riesgo": st.column_config.ProgressColumn("Riesgo", min_value=0, max_value=10, format="%d/10"),
-                                    "titulo": st.column_config.TextColumn("Título", width="large"),
+                                    "certeza": "Certeza", "titulo": st.column_config.TextColumn("Título", width="large"),
                                     "fuente": "Fuente", "url": st.column_config.LinkColumn("Abrir", display_text="ver")})
     else:
         st.info("No hay noticias relevantes en los últimos días.")
