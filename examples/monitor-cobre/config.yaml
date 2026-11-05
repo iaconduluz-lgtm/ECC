@@ -1,6 +1,9 @@
 # Configuración del monitor de cobre.
 # Los valores marcados AJUSTAR son estimados: reemplázalos con tus cotizaciones reales.
 
+apariencia:
+  tema: cobre   # cobre | noche | corporativo | minimal
+
 empresa:
   proveedor_actual: peru          # clave de la lista de proveedores de abajo
   inventario_toneladas: 120       # AJUSTAR: cobre en bodega hoy

@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from monitor import __main__ as motor
-from monitor import analisis, configuracion, costos, demo, ia, inventario
+from monitor import analisis, configuracion, costos, demo, ia, inventario, temas
 from monitor.noticias import ICONO
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -50,6 +50,13 @@ def revisar_secrets():
 
 
 revisar_secrets()
+
+# ---- Diseño: MONITOR_TEMA > Secrets [apariencia] > config.yaml ----
+_cfg_base = configuracion.cargar(BASE)
+TEMA = temas.obtener(os.environ.get("MONITOR_TEMA") or (secreto("apariencia") or {}).get("tema")
+                     or (_cfg_base.get("apariencia") or {}).get("tema"))
+st.markdown(temas.bloque_css(TEMA), unsafe_allow_html=True)
+AZUL, ROJO, GRIS, TINTA2 = TEMA["serie"], TEMA["malo"], TEMA["neutro"], TEMA["texto2"]
 
 
 def pedir_clave():
@@ -223,9 +230,10 @@ ctx, todas, errores = motor.calcular(datos, cfg)
 prov_actual = cfg["proveedores"][emp["proveedor_actual"]]
 
 # ======================= Encabezado =======================
-st.title("Monitor de cobre")
-st.caption(f"Última consulta: {ctx['fecha_hora']} · Cobre: {ctx.get('fuente_cobre', 's/d')} · "
-           f"TRM: {ctx.get('fuente_trm') or 's/d'}")
+st.markdown(temas.encabezado_html(
+    TEMA, "Monitor de cobre", "Precio del cobre, dólar, inventario y riesgo de suministro — Elcope → Buenaventura → Cali",
+    [f"🕒 {ctx['fecha_hora']}", f"Cobre: {ctx.get('fuente_cobre', 's/d')}", f"TRM: {ctx.get('fuente_trm') or 's/d'}"]),
+    unsafe_allow_html=True)
 if not ctx.get("trm") or not ctx.get("cobre_usd_t"):
     st.warning("Falta " + " y ".join(x for x, ok in (("la TRM", ctx.get("trm")), ("el precio del cobre", ctx.get("cobre_usd_t")))
                                      if not ok) + ". El tablero vuelve a intentar solo en unos 2 minutos, o pulsa "
@@ -287,7 +295,7 @@ with t_inv:
                      alt.Tooltip("compras_importacion:Q", title="Importación (t)"), alt.Tooltip("ventas:Q", title="Ventas (t)")])
         barras_i = base_i.mark_bar(cornerRadiusEnd=4, size=26).encode(
             y=alt.Y("dias_inventario:Q", title="Días de inventario al cierre del mes", axis=alt.Axis(gridOpacity=0.3)),
-            color=alt.Color("tipo:N", scale=alt.Scale(domain=["Real", "Proyectado"], range=[AZUL, "#eb6834"]),
+            color=alt.Color("tipo:N", scale=alt.Scale(domain=["Real", "Proyectado"], range=[AZUL, TEMA["serie2"]]),
                             legend=alt.Legend(title=None, orient="top")))
         regla_i = alt.Chart(pd.DataFrame({"y": [minimo]})).mark_rule(color=TINTA2, strokeDash=[4, 4]).encode(y="y:Q")
         st.altair_chart((barras_i + regla_i).properties(height=300), width="stretch")
@@ -495,7 +503,7 @@ with t_esc:
                      alt.Tooltip("costo_cop_t:Q", format=",.0f", title="Costo COP/t")])
         calor = base_h.mark_rect(stroke="white", strokeWidth=2, cornerRadius=4).encode(
             color=alt.Color("impacto_mensual_cop:Q", legend=alt.Legend(title="COP/mes", format="~s"),
-                            scale=alt.Scale(domain=[-lim, 0, lim], range=[AZUL, GRIS, ROJO], interpolate="rgb")))
+                            scale=alt.Scale(domain=[-lim, 0, lim], range=[TEMA["bueno"], GRIS, ROJO], interpolate="rgb")))
         etiquetas = base_h.mark_text(fontSize=12).encode(
             text="texto:N",
             color=alt.condition(f"abs(datum.impacto_mensual_cop) > {lim * 0.55}", alt.value("white"), alt.value("#0b0b0b")))

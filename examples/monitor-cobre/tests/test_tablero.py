@@ -54,7 +54,7 @@ class TestTablero(unittest.TestCase):
         with mock.patch.dict(os.environ, {"MONITOR_DEMO": "1"}):
             at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60).run()
         self.assertEqual(len(at.exception), 0)
-        self.assertEqual(at.title[0].value, "Monitor de cobre")
+        self.assertTrue(any("mc-encabezado" in m.value and "Monitor de cobre" in m.value for m in at.markdown))
         self.assertEqual(len(at.metric), 13)
 
     def test_pestanas_y_simulador(self):
@@ -73,6 +73,18 @@ class TestTablero(unittest.TestCase):
             nuevo = next(m for m in at.metric if m.label == "Nuevo costo por tonelada")
             self.assertTrue(nuevo.delta.startswith("+"))
             self.assertTrue(any("ANTHROPIC_API_KEY" in i.value for i in at.info))
+
+    def test_todos_los_temas_cargan(self):
+        from streamlit.testing.v1 import AppTest
+        from monitor import temas
+        for nombre in temas.TEMAS:
+            with mock.patch.dict(os.environ, {"MONITOR_DEMO": "1", "MONITOR_TEMA": nombre}):
+                at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60).run()
+            self.assertEqual(len(at.exception), 0, nombre)
+            self.assertTrue(any(temas.TEMAS[nombre]["acento"] in m.value for m in at.markdown), nombre)
+            bloque = temas.bloque_css(temas.TEMAS[nombre])
+            self.assertNotIn("\n\n", bloque)  # una línea en blanco haría que Markdown muestre el CSS como texto
+            self.assertNotIn("/*", bloque)
 
     def test_secrets_con_error_bloquean_la_app(self):
         from streamlit.testing.v1 import AppTest
