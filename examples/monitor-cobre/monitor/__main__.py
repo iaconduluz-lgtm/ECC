@@ -5,7 +5,7 @@ import sys
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from . import alertas, analisis, cobre, configuracion, costos, estado, inventario, noticias, reporte, trm
+from . import alertas, analisis, cobre, configuracion, costos, estado, historias, inventario, noticias, reporte, trm
 
 
 def descargar(cfg):
@@ -23,13 +23,18 @@ def descargar(cfg):
         datos["cobre"] = cobre.obtener({}, errores)
     except Exception as e:
         errores.append(f"Cobre: {e}")
-    datos["noticias"] = noticias.obtener(cfg.get("noticias", {}), errores)
+    datos["estado_fuentes"] = []
+    datos["noticias"] = noticias.obtener(cfg.get("noticias", {}), errores, datos["estado_fuentes"])
     return datos
 
 
-def calcular(datos, cfg):
+def calcular(datos, cfg, historial=None):
     """Parte rápida (sin red): costos, contexto, escenarios y recomendación con la configuración actual."""
-    ctx = {k: datos[k] for k in ("fecha", "fecha_hora", "noticias")}
+    ctx = {k: datos[k] for k in ("fecha", "fecha_hora")}
+    ctx["noticias"] = [dict(n) for n in datos["noticias"]]  # copia: el seguimiento anota cada noticia
+    ctx["noticias_ocultas"] = []
+    if historial is not None:
+        ctx["noticias"], ctx["noticias_ocultas"] = historias.actualizar(historial, ctx["noticias"])
     errores = list(datos["errores"])
     serie_trm = datos["serie_trm"]
     if serie_trm:
@@ -69,7 +74,11 @@ def calcular(datos, cfg):
 
 
 def ejecutar(cfg, base, enviar=True, guardar=True):
-    ctx, todas, errores = calcular(descargar(cfg), cfg)
+    ruta_hist = os.path.join(base, "data", "historias.json")
+    historial = historias.cargar(ruta_hist)
+    ctx, todas, errores = calcular(descargar(cfg), cfg, historial)
+    if guardar:
+        historias.guardar(ruta_hist, historial)
     ruta_enviadas = os.path.join(base, "data", "alertas_enviadas.json")
     enviadas = estado.cargar_enviadas(ruta_enviadas)
     nuevas = [a for a in todas if a["id"] not in set(enviadas)]

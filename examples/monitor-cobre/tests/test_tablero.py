@@ -55,7 +55,7 @@ class TestTablero(unittest.TestCase):
             at = AppTest.from_file(os.path.join(BASE, "app.py"), default_timeout=60).run()
         self.assertEqual(len(at.exception), 0)
         self.assertTrue(any("mc-encabezado" in m.value and "Monitor de cobre" in m.value for m in at.markdown))
-        self.assertEqual(len(at.metric), 13)
+        self.assertEqual(len(at.metric), 17)
 
     def test_pestanas_y_simulador(self):
         from streamlit.testing.v1 import AppTest
@@ -108,7 +108,7 @@ class TestTablero(unittest.TestCase):
         self.assertEqual(at.error[0].value, "Clave incorrecta.")
         with mock.patch.dict(os.environ, {"MONITOR_DEMO": "1"}):
             at.text_input[0].input("secreta").run()
-        self.assertEqual(len(at.metric), 13)
+        self.assertEqual(len(at.metric), 17)
 
 
 if __name__ == "__main__":

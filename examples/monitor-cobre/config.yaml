@@ -99,5 +99,10 @@ noticias:
     - "Panama Canal shipping"
     - "container shipping rates"
     - "dollar Federal Reserve rates"
+  # Feeds RSS de medios u organismos, leídos directamente (además de Google News). Formato:
+  #   - nombre: "Nombre del medio"
+  #     url: "https://.../rss"
+  # Antes de dejar uno fijo, revisa en la pestaña Noticias → "Estado de las fuentes" que traiga noticias.
+  rss_directos: []
   gdelt:
     - '(copper OR cobre) (strike OR huelga OR blockade OR bloqueo OR "force majeure" OR shortage OR tariff OR arancel)'

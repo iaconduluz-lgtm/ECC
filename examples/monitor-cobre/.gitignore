@@ -5,3 +5,4 @@ __pycache__/
 # Datos privados de la empresa: nunca al repositorio
 data/ajustes.yaml
 .streamlit/secrets.toml
+data/historias.json

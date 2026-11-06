@@ -101,10 +101,15 @@ def nivel(riesgo):
     return next((n for minimo, n in NIVELES if riesgo >= minimo), "")
 
 
-def evaluar(titulo, proveedor=()):
-    """Clasifica un titular: riesgo 0-10, nivel, certeza, duración y si menciona a tu proveedor directo."""
+def evaluar(titulo, proveedor=(), resumen=""):
+    """Clasifica un titular: riesgo 0-10, nivel, certeza, duración y si menciona a tu proveedor directo.
+
+    El `resumen` (párrafo que trae la noticia) solo se usa para detectar buenas noticias ("levantan el bloqueo")
+    y menciones a tu proveedor; los puntos de riesgo salen del título, para no sumar dos veces lo mismo.
+    """
     t = normalizar(titulo)
-    del_proveedor = any(_hay(re.escape(normalizar(k)), t) for k in proveedor)
+    tr = normalizar(resumen)
+    del_proveedor = any(_hay(re.escape(normalizar(k)), t) or _hay(re.escape(normalizar(k)), tr) for k in proveedor)
     activos = [k for k in ACTIVOS if _hay(re.escape(k), t)]
     eventos = [k for k in EVENTOS if _hay(re.escape(k), t)]
     en_contexto = any(_hay(k, t) for k in CONTEXTO) and any(EVENTOS[k] >= 3 for k in eventos)
@@ -115,7 +120,7 @@ def evaluar(titulo, proveedor=()):
     hay_problema = any(EVENTOS[k] > 0 for k in eventos)
     if del_proveedor and hay_problema:
         total += 4  # tu proveedor directo (casi único) pesa más que cualquier otra mina
-    positiva = any(_hay(re.escape(k), t) for k in POSITIVAS)
+    positiva = any(_hay(re.escape(k), t) or _hay(re.escape(k), tr) for k in POSITIVAS)
     posible = any(_hay(re.escape(k), t) for k in POSIBLE)
     hecho = any(_hay(re.escape(k), t) for k in HECHO)
     m = re.search(r"(\d+)\s*(dias|days|semanas|weeks)", t)
@@ -163,11 +168,18 @@ def parse_rss(xml_text):
         fuente = (item.findtext("source") or "").strip()
         if fuente and titulo.endswith(" - " + fuente):  # Google News añade " - Medio" al final del título
             titulo = titulo[: -len(" - " + fuente)].strip()
+        descripcion = item.findtext("description") or ""
+        # Google agrupa la misma noticia de varios medios: cada uno aparece como <font>Medio</font>.
+        otros = [re.sub(r"<[^>]+>", "", m).strip() for m in re.findall(r"<font[^>]*>(.*?)</font>", descripcion, re.S)]
+        resumen = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", descripcion)).strip()
+        if resumen.startswith(titulo):
+            resumen = resumen[len(titulo):].strip()
         try:
             fecha = parsedate_to_datetime(item.findtext("pubDate"))
         except (TypeError, ValueError):
             fecha = None
-        items.append({"titulo": titulo, "url": url, "fuente": fuente, "fecha": fecha, "origen": "Google News"})
+        items.append({"titulo": titulo, "url": url, "fuente": fuente, "fecha": fecha, "origen": "Google News",
+                      "resumen": resumen[:400], "otros_medios": [o for o in otros if o and o != fuente]})
     return items
 
 
@@ -222,11 +234,19 @@ def _palabras(titulo):
     return {w for w in re.findall(r"[a-z0-9]+", normalizar(titulo)) if len(w) >= 4 and w not in VACIAS}
 
 
-def _misma_noticia(a, b):
+def palabras(titulo):
+    return _palabras(titulo)
+
+
+def misma_noticia(a, b, umbral=0.6):
+    return _misma_noticia(a, b, umbral)
+
+
+def _misma_noticia(a, b, umbral=0.6):
     """Dos titulares cuentan la misma noticia si comparten la mayoría de sus palabras importantes."""
     if not a or not b:
         return False
-    return len(a & b) / min(len(a), len(b)) >= 0.6
+    return len(a & b) / min(len(a), len(b)) >= umbral
 
 
 def filtrar(items, max_horas, ahora=None, proveedor=()):
@@ -252,23 +272,25 @@ def filtrar(items, max_horas, ahora=None, proveedor=()):
             continue
         if fecha > ahora + timedelta(hours=6):  # fechas en el futuro: dato malo
             continue
-        e = evaluar(it["titulo"], proveedor)
+        e = evaluar(it["titulo"], proveedor, it.get("resumen", ""))
         if e["riesgo"] == 0:
             continue
         nueva = {**it, "id": nid, **e, "fecha": fecha, "fecha_desde_url": bool(f_url)}
         pal = _palabras(it["titulo"])
-        grupo = next((g for g in grupos if _misma_noticia(pal, g["palabras"])), None)
+        buena = e["certeza"] == "Buena noticia"  # "levantan el bloqueo" no confirma "bloquean"
+        grupo = next((g for g in grupos if g["buena"] == buena and _misma_noticia(pal, g["palabras"])), None)
         if grupo:
             grupo["miembros"].append(nueva)
             grupo["palabras"] |= pal
         else:
-            grupos.append({"palabras": pal, "miembros": [nueva]})
+            grupos.append({"palabras": pal, "miembros": [nueva], "buena": buena})
 
     out = []
     for g in grupos:
         m = g["miembros"]
         principal = max(m, key=lambda x: x["riesgo"])
-        fuentes = sorted({(x.get("fuente") or x.get("origen") or "").strip() for x in m} - {""})
+        fuentes = sorted(({(x.get("fuente") or x.get("origen") or "").strip() for x in m}
+                          | {o.strip() for x in m for o in x.get("otros_medios", [])}) - {""})
         n = max(1, len(fuentes))
         item = {**principal, "fuentes": n, "lista_fuentes": fuentes,
                 "fecha": min(x["fecha"] for x in m)}  # la primera publicación conocida
@@ -284,32 +306,52 @@ def filtrar(items, max_horas, ahora=None, proveedor=()):
     return out
 
 
-def obtener(config, errores):
-    """Ejecuta todas las búsquedas en paralelo (una caída no detiene el resto)."""
-    dias = max(1, round(config.get("max_horas", 72) / 24))
-    busquedas = ([(q, "es") for q in config.get("google_news", [])]
-                 + [(q, "co") for q in config.get("google_news_colombia", [])]
-                 + [(q, "es") for q in config.get("google_news_mundo", [])]
-                 + [(q, "en") for q in config.get("google_news_en", [])])
+def obtener(config, errores, estado=None):
+    """Ejecuta todas las búsquedas en paralelo (una caída no detiene el resto).
 
-    def una(busqueda):
-        q, idioma = busqueda
+    `estado`, si se pasa una lista, recibe una fila por búsqueda: origen, consulta, noticias encontradas y error.
+    """
+    dias = max(1, round(config.get("max_horas", 72) / 24))
+    tareas = ([("Google News · Perú", q, lambda q=q: _buscar_google(q, "es", dias)) for q in config.get("google_news", [])]
+              + [("Google News · Colombia", q, lambda q=q: _buscar_google(q, "co", dias)) for q in config.get("google_news_colombia", [])]
+              + [("Google News · Mundo (es)", q, lambda q=q: _buscar_google(q, "es", dias)) for q in config.get("google_news_mundo", [])]
+              + [("Google News · Mundo (en)", q, lambda q=q: _buscar_google(q, "en", dias)) for q in config.get("google_news_en", [])]
+              + [("RSS directo", f.get("nombre") or f.get("url"), lambda f=f: _rss_directo(f)) for f in config.get("rss_directos", [])])
+
+    def una(tarea):
+        origen, consulta, fn = tarea
         try:
-            return _buscar_google(q, idioma, dias), None
+            return origen, consulta, fn(), None
         except Exception as e:
-            return [], f"Google News '{q}': {e}"
+            return origen, consulta, [], str(e)[:160]
 
     items = []
     with ThreadPoolExecutor(max_workers=8) as ex:
-        for encontrados, error in ex.map(una, busquedas):  # map conserva el orden
+        for origen, consulta, encontrados, error in ex.map(una, tareas):  # map conserva el orden
             items += encontrados
             if error:
-                errores.append(error)
+                errores.append(f"{origen} '{consulta}': {error}")
+            if estado is not None:
+                estado.append({"origen": origen, "consulta": consulta, "noticias": len(encontrados), "error": error or ""})
     for q in config.get("gdelt", []):
         try:
-            items += _buscar_gdelt(q)
+            encontrados, error = _buscar_gdelt(q), ""
         except ValueError:
-            errores.append("GDELT: respuesta no válida (suele ser límite de consultas; se reintenta en la próxima)")
+            encontrados, error = [], "respuesta no válida (suele ser límite de consultas; se reintenta en la próxima)"
         except Exception as e:
-            errores.append(f"GDELT: {e}")
+            encontrados, error = [], str(e)[:160]
+        items += encontrados
+        if error:
+            errores.append(f"GDELT: {error}")
+        if estado is not None:
+            estado.append({"origen": "GDELT", "consulta": q, "noticias": len(encontrados), "error": error})
     return filtrar(items, config.get("max_horas", 72), proveedor=config.get("proveedor_claves", []))
+
+
+def _rss_directo(fuente):
+    """Feed RSS de un medio u organismo (config `rss_directos`: lista de {nombre, url})."""
+    items = parse_rss(red.get(fuente["url"]).text)
+    for it in items:
+        it["origen"] = "RSS directo"
+        it["fuente"] = it["fuente"] or fuente.get("nombre", "")
+    return items

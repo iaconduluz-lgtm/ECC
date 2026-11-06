@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from monitor import __main__ as motor
-from monitor import analisis, configuracion, costos, demo, ia, inventario, temas
+from monitor import analisis, configuracion, costos, demo, historias, ia, inventario, temas
 from monitor.noticias import ICONO
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -226,7 +226,24 @@ datos = descargar(cfg["noticias"], modo_demo, st.session_state.get("marca"))
 if (not datos["serie_trm"] or not datos["cobre"]) and datetime.now().timestamp() - datos["descargado"] > 120:
     st.session_state["marca"] = datetime.now().isoformat()
     st.rerun()
-ctx, todas, errores = motor.calcular(datos, cfg)
+# Seguimiento de historias y opiniones: en un archivo (en demostración, solo en memoria para no mezclar datos).
+RUTA_HIST = os.path.join(BASE, "data", "historias.json")
+if modo_demo:
+    HISTORIAL = st.session_state.setdefault("historial_demo", historias.vacio())
+else:
+    HISTORIAL = historias.cargar(RUTA_HIST)
+ctx, todas, errores = motor.calcular(datos, cfg, HISTORIAL)
+
+
+def guardar_historial():
+    if not modo_demo:
+        try:
+            historias.guardar(RUTA_HIST, HISTORIAL)
+        except OSError as e:
+            errores.append(f"No se pudo guardar el seguimiento de noticias: {e}")
+
+
+guardar_historial()
 prov_actual = cfg["proveedores"][emp["proveedor_actual"]]
 
 # ======================= Encabezado =======================
@@ -577,12 +594,25 @@ with t_not:
             st.caption("Análisis generado por IA: puede equivocarse. Verifica las noticias antes de decidir.")
 
     st.subheader("Todas las noticias")
+    SEGUIMIENTO = {"Nueva": "🆕 Nueva", "Empeora": "⬆️ Empeora", "Sigue": "↻ Sigue", "Sin novedades": "⏸ Sin novedades",
+                   "Resuelta": "✅ Resuelta", "Resuelve una historia": "✅ Buena noticia"}
     if noticias:
+        h1, h2, h3, h4 = st.columns(4)
+        estados = [n.get("estado_historia", "") for n in noticias]
+        h1.metric("🆕 Historias nuevas", estados.count("Nueva"))
+        h2.metric("⬆️ Empeoran", estados.count("Empeora"))
+        h3.metric("↻ Siguen", estados.count("Sigue"))
+        h4.metric("✅ Resueltas", estados.count("Resuelta") + estados.count("Resuelve una historia"))
         dfn = pd.DataFrame(noticias)
         dfn["Tema"] = [analisis.clasificar(n)[0] for n in noticias]
         dfn["Nivel"] = dfn["nivel"].map(lambda nv: f"{ICONO.get(nv, '')} {nv}")
         dfn["Proveedor"] = dfn["afecta_proveedor"].map(lambda x: "⚠️ Sí" if x else "")
         dfn["Región"] = dfn["region"].map({"Perú": "🇵🇪 Perú", "Colombia": "🇨🇴 Colombia", "Mundo": "🌎 Mundo"})
+        dfn["Seguimiento"] = [(("⭐ " if n.get("opinion") == "sirve" else "")
+                               + SEGUIMIENTO.get(n.get("estado_historia", ""), "")
+                               + (f" · día {n['dias_historia']}" if n.get("dias_historia", 1) > 1
+                                  and n.get("estado_historia") != "Nueva" else ""))
+                              for n in noticias]
         f1, f2, f3 = st.columns([2, 2, 2])
         ver_niveles = f1.multiselect("Mostrar niveles", ORDEN_NIVELES, default=ORDEN_NIVELES,
                                      format_func=lambda nv: f"{ICONO[nv]} {nv}")
@@ -594,17 +624,57 @@ with t_not:
             dfn = dfn.sort_values("fecha", ascending=False, na_position="last")
         dfn["Publicada"] = dfn["fecha"].map(lambda d: d.astimezone(ZoneInfo("America/Bogota")).strftime("%d/%m/%Y %H:%M")
                                             if d is not None and not pd.isna(d) else "")
-        dfn["Fuentes"] = [f"{n.get('fuentes', 1)} · " + ", ".join(n.get("lista_fuentes") or [])[:60] for n in dfn.to_dict("records")]
+        dfn["Fuentes"] = [f"{n.get('fuentes', 1)} · " + ", ".join(n.get("lista_fuentes") or [])[:60]
+                          + (" · medio poco útil" if n.get("medio_poco_util") else "") for n in dfn.to_dict("records")]
         st.caption(f"{len(dfn)} de {len(noticias)} noticias de los últimos {round(cfg['noticias'].get('max_horas', 72) / 24)} días. "
-                   "Proveedor = la noticia menciona a tu proveedor directo. *Publicada* = primera publicación conocida "
-                   "(hora Colombia). Abre **ver** para confirmar en el medio original.")
-        st.dataframe(dfn[["Nivel", "riesgo", "Región", "Proveedor", "certeza", "Fuentes", "Tema", "titulo", "Publicada", "url"]],
-                     hide_index=True, width="stretch",
-                     column_config={"riesgo": st.column_config.ProgressColumn("Riesgo", min_value=0, max_value=10, format="%d/10"),
-                                    "certeza": "Certeza", "titulo": st.column_config.TextColumn("Título", width="large"),
-                                    "fuente": "Fuente", "url": st.column_config.LinkColumn("Abrir", display_text="ver")})
+                   "Selecciona una o varias filas (casilla a la izquierda) y marca si te sirven. *Publicada* = primera "
+                   "publicación conocida (hora Colombia). Abre **ver** para confirmar en el medio original.")
+        evento = st.dataframe(
+            dfn[["Nivel", "Seguimiento", "riesgo", "Región", "Proveedor", "certeza", "Fuentes", "Tema", "titulo", "Publicada", "url"]],
+            hide_index=True, width="stretch", on_select="rerun", selection_mode="multi-row", key="tabla_noticias",
+            column_config={"riesgo": st.column_config.ProgressColumn("Riesgo", min_value=0, max_value=10, format="%d/10"),
+                           "certeza": "Certeza", "titulo": st.column_config.TextColumn("Título", width="large"),
+                           "url": st.column_config.LinkColumn("Abrir", display_text="ver")})
+        elegidas = [noticias[int(i)] for i in dfn.index[list(evento.selection.rows)]] if evento.selection.rows else []
+        b1, b2, b3, _ = st.columns([1, 1, 1, 3])
+        for col, etiqueta, valor in ((b1, "👍 Me sirve", "sirve"), (b2, "👎 No me sirve", "no_sirve"), (b3, "Quitar opinión", "")):
+            if col.button(etiqueta, disabled=not elegidas, width="stretch"):
+                for n in elegidas:
+                    historias.opinar(HISTORIAL, n, valor)
+                guardar_historial()
+                st.rerun()
+        if EN_LA_NUBE:
+            st.caption("En la versión en internet, el seguimiento y tus opiniones se guardan mientras la app esté "
+                       "encendida; si Streamlit la reinicia, empiezan de nuevo.")
     else:
         st.info("No hay noticias relevantes en los últimos días.")
+
+    ocultas = ctx.get("noticias_ocultas") or []
+    if ocultas:
+        with st.expander(f"👎 {len(ocultas)} noticia(s) ocultas porque marcaste que no te sirven"):
+            volver = st.multiselect("Mostrar de nuevo", range(len(ocultas)), format_func=lambda i: ocultas[i]["titulo"][:110])
+            if st.button("Mostrar las seleccionadas", disabled=not volver):
+                for i in volver:
+                    historias.opinar(HISTORIAL, ocultas[i], "")
+                guardar_historial()
+                st.rerun()
+    poco = historias.medios_poco_utiles(HISTORIAL)
+    if poco:
+        st.caption("Medios que bajan en el orden por tus opiniones: " + ", ".join(poco))
+
+    with st.expander("📡 Estado de las fuentes (qué trajo cada búsqueda)"):
+        estado_f = pd.DataFrame(datos.get("estado_fuentes") or [])
+        if len(estado_f):
+            ok = int((estado_f["error"] == "").sum())
+            st.markdown(f"**{ok} de {len(estado_f)}** búsquedas respondieron · "
+                        f"**{int(estado_f['noticias'].sum())}** noticias encontradas antes de filtrar.")
+            estado_f["Estado"] = estado_f["error"].map(lambda e: "✅ OK" if not e else "❌ " + e)
+            st.dataframe(estado_f[["origen", "consulta", "noticias", "Estado"]], hide_index=True, width="stretch",
+                         column_config={"origen": "Origen", "consulta": st.column_config.TextColumn("Búsqueda", width="large"),
+                                        "noticias": "Noticias"})
+            st.caption("Cada búsqueda trae noticias en bruto; después se quitan las viejas, repetidas y las que no te afectan.")
+        else:
+            st.info("Sin información de fuentes en esta consulta.")
 
 # ======================= Qué falta =======================
 with t_falta:
