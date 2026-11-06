@@ -48,8 +48,11 @@ def evaluar(ctx, cfg):
         if n["riesgo"] >= minimo:
             nivel = "PELIGRO" if n["riesgo"] >= 8 else ("RIESGO ALTO" if n["riesgo"] >= 6 else "RIESGO MEDIO")
             marca = "TU PROVEEDOR · " if n.get("afecta_proveedor") else ""
+            fuentes = n.get("fuentes", 1)
+            confirma = f"{fuentes} fuentes" if fuentes >= 2 else "1 fuente, sin confirmar"
+            fecha = n["fecha"].strftime("%d/%m/%Y") if n.get("fecha") else "s/f"
             out.append({"id": f"news-{n['id']}", "nivel": nivel,
-                        "texto": f"{marca}[{n.get('nivel', '')} {n['riesgo']}/10] {n['titulo']}\n{n['url']}"})
+                        "texto": f"{marca}[{n.get('nivel', '')} {n['riesgo']}/10 · {confirma} · {fecha}] {n['titulo']}\n{n['url']}"})
     return out
 
 

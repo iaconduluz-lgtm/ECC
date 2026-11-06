@@ -170,6 +170,61 @@ class TestNiveles(unittest.TestCase):
         self.assertIn("proveedor alternativo", r["accion"])
 
 
+class TestFechasYConfirmacion(unittest.TestCase):
+    AHORA = datetime(2026, 11, 6, 15, 0, tzinfo=timezone.utc)
+
+    def item(self, titulo, url, fuente, horas=1, fecha=True):
+        return {"titulo": titulo, "url": url, "fuente": fuente, "origen": "Google News",
+                "fecha": self.AHORA - timedelta(hours=horas) if fecha else None}
+
+    def filtrar(self, items):
+        from monitor import noticias
+        return noticias.filtrar(items, 72, ahora=self.AHORA, proveedor=["Elcope"])
+
+    def test_fecha_en_url(self):
+        from monitor import noticias
+        self.assertEqual(noticias.fecha_en_url("https://x.pe/2026/09/12/huelga").date(), date(2026, 9, 12))
+        self.assertEqual(noticias.fecha_en_url("https://x.com/nota-20260915-bloqueo.html").date(), date(2026, 9, 15))
+        self.assertIsNone(noticias.fecha_en_url("https://news.google.com/rss/articles/CBMiXYZ"))
+        self.assertIsNone(noticias.fecha_en_url("https://x.pe/2026/13/45/fecha-invalida"))
+
+    def test_noticia_vieja_con_fecha_nueva_en_el_feed_se_descarta(self):
+        # El caso real: el feed dice "hoy" pero el enlace dice septiembre.
+        out = self.filtrar([self.item("Huelga indefinida paraliza Las Bambas", "https://x.pe/2026/09/12/huelga", "A")])
+        self.assertEqual(out, [])
+
+    def test_sin_fecha_se_descarta(self):
+        out = self.filtrar([self.item("Bloqueo en Las Bambas paraliza envíos", "https://x.pe/a", "A", fecha=False)])
+        self.assertEqual(out, [])
+
+    def test_una_fuente_no_llega_a_peligro(self):
+        out = self.filtrar([self.item("Bloqueo en Las Bambas paraliza envíos de cobre", "https://x.pe/a", "A")])
+        self.assertEqual((out[0]["nivel"], out[0]["fuentes"]), ("Alto", 1))
+        self.assertIn("sin confirmar", out[0]["certeza"])
+
+    def test_varias_fuentes_confirman_y_se_agrupan(self):
+        out = self.filtrar([
+            self.item("Bloqueo en Las Bambas paraliza envíos de cobre", "https://a.pe/1", "Medio A"),
+            self.item("Las Bambas: bloqueo paraliza los envíos de cobre", "https://b.pe/2", "Medio B", horas=3),
+            self.item("Precio del dólar en Colombia hoy", "https://c.co/3", "Medio C")])
+        bambas = next(n for n in out if "Bambas" in n["titulo"])
+        self.assertEqual((bambas["nivel"], bambas["fuentes"]), ("Peligro", 2))
+        self.assertEqual(bambas["fecha"], self.AHORA - timedelta(hours=3))  # primera publicación conocida
+        self.assertEqual(sum("Bambas" in n["titulo"] for n in out), 1)    # una sola fila para la misma noticia
+
+    def test_mismo_medio_dos_veces_no_confirma(self):
+        out = self.filtrar([
+            self.item("Bloqueo en Las Bambas paraliza envíos de cobre", "https://a.pe/1", "Medio A"),
+            self.item("Bloqueo en Las Bambas paraliza envíos de cobre hoy", "https://a.pe/2", "Medio A")])
+        self.assertEqual((out[0]["nivel"], out[0]["fuentes"]), ("Alto", 1))
+
+    def test_quita_el_nombre_del_medio_del_titulo(self):
+        from monitor import noticias
+        xml = ("<rss><channel><item><title>Bloqueo en Las Bambas - El Comercio</title><link>u</link>"
+               "<pubDate>Fri, 06 Nov 2026 10:00:00 GMT</pubDate><source>El Comercio</source></item></channel></rss>")
+        self.assertEqual(noticias.parse_rss(xml)[0]["titulo"], "Bloqueo en Las Bambas")
+
+
 class TestClasificacion(unittest.TestCase):
     def test_categorias(self):
         self.assertEqual(analisis.clasificar({"titulo": "Huelga en Cerro Verde"})[0], "Suministro Perú")

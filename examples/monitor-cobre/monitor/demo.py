@@ -34,13 +34,24 @@ def _cobre(dias=1260):
                                   "indicators": {"quote": [{"close": cierres}]}}]}}
 
 
+MEDIOS_DEMO = ["Medio A", "Medio B", "Medio C"]
+
+
 def _rss():
+    """Las 2 primeras noticias aparecen en 3 medios (confirmadas); el resto en uno solo. Una vieja de septiembre
+    con fecha de hoy en el feed pero fecha antigua en el enlace sirve para comprobar que se descarta."""
     ahora = datetime.now(timezone.utc)
-    items = "".join(
-        f"<item><title>{t}</title><link>https://ejemplo.demo/{i}</link>"
-        f"<pubDate>{format_datetime(ahora - timedelta(hours=2 * i))}</pubDate><source>Demo</source></item>"
-        for i, t in enumerate(NOTICIAS_DEMO))
-    return f"<rss><channel>{items}</channel></rss>"
+    items = []
+    for i, t in enumerate(NOTICIAS_DEMO):
+        medios = MEDIOS_DEMO if i < 2 else MEDIOS_DEMO[i % 3:i % 3 + 1]
+        for j, medio in enumerate(medios):
+            items.append(f"<item><title>{t} - {medio}</title><link>https://ejemplo.demo/{i}-{j}</link>"
+                         f"<pubDate>{format_datetime(ahora - timedelta(hours=2 * i + j))}</pubDate>"
+                         f"<source>{medio}</source></item>")
+    items.append(f"<item><title>Huelga indefinida paraliza Las Bambas - Medio A</title>"
+                 f"<link>https://ejemplo.demo/2026/09/12/huelga-las-bambas</link>"
+                 f"<pubDate>{format_datetime(ahora)}</pubDate><source>Medio A</source></item>")
+    return f"<rss><channel>{''.join(items)}</channel></rss>"
 
 
 def falso_get(url, params=None, headers=None):

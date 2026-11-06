@@ -68,7 +68,9 @@ SISTEMA = (
     "El material llega por el puerto indicado en puerto_llegada y va por carretera a la planta en ciudad_planta, así "
     "que también importan paros, bloqueos y cierres en ese puerto y en esa vía, el dólar en Colombia, la DIAN y los aranceles. Paga en dólares, así que le afectan el precio del cobre "
     "(LME/COMEX) y la TRM. Analiza las noticias y los datos que te dan. Sé concreto y práctico, en español sencillo, "
-    "y usa las cifras de impacto que te entregan en lugar de inventar otras. Si una noticia no es relevante, ignórala. "
+    "y usa las cifras de impacto que te entregan en lugar de inventar otras. "
+    "Una noticia reportada por un solo medio (medios_que_la_reportan = 1) no está confirmada: dilo y no la trates como "
+    "un hecho seguro. Si una noticia no es relevante, ignórala. "
     "Si los datos no alcanzan para una conclusión, dilo. Tus recomendaciones son de apoyo: la decisión final es del equipo."
 )
 
@@ -103,6 +105,7 @@ def _datos(ctx, cfg, sens, recomendacion_reglas):
         "recomendacion_por_reglas": recomendacion_reglas,
         "noticias": [{"titulo": n["titulo"], "fuente": n.get("fuente"), "riesgo_reglas": n["riesgo"],
                       "nivel_reglas": n.get("nivel"), "menciona_proveedor_directo": n.get("afecta_proveedor", False),
+                      "medios_que_la_reportan": n.get("fuentes", 1),
                       "fecha": n["fecha"].isoformat() if n.get("fecha") else None}
                      for n in (ctx.get("noticias") or [])[:25]],
     }

@@ -528,7 +528,10 @@ with t_not:
             "que dure **varios días**. Lo bajan: que sea solo una **amenaza o propuesta** (máximo Medio) o una "
             "**buena noticia** (\"levantan el bloqueo\", \"reanuda\"). Las noticias de tu proveedor generan alerta desde Medio.\n\n"
             "**Región:** Perú y Colombia cubren tu cadena directa (Elcope → Callao → Buenaventura → Cali). "
-            "Las noticias del **resto del mundo** llegan como máximo a **Alto**: mueven el precio, pero no cortan tu suministro.")
+            "Las noticias del **resto del mundo** llegan como máximo a **Alto**: mueven el precio, pero no cortan tu suministro.\n\n"
+            "**Confirmación y fechas:** una noticia publicada por **un solo medio** llega como máximo a **Alto** y se "
+            "marca *sin confirmar*; **Peligro** exige al menos **2 medios distintos**. Se descartan las noticias sin "
+            "fecha y las viejas: si el enlace trae su fecha (p. ej. `/2026/09/12/`), se usa esa y no la del buscador.")
 
     st.subheader("Análisis automático de noticias")
     grupos = analisis.resumen_noticias(noticias)
@@ -589,11 +592,13 @@ with t_not:
         dfn = dfn[dfn["nivel"].isin(ver_niveles) & dfn["region"].isin(ver_regiones)]
         if orden_n == "Más recientes primero":
             dfn = dfn.sort_values("fecha", ascending=False, na_position="last")
-        dfn["Fecha"] = dfn["fecha"].map(lambda d: d.astimezone(ZoneInfo("America/Bogota")).strftime("%d %b %H:%M")
-                                        if d is not None and not pd.isna(d) else "")
+        dfn["Publicada"] = dfn["fecha"].map(lambda d: d.astimezone(ZoneInfo("America/Bogota")).strftime("%d/%m/%Y %H:%M")
+                                            if d is not None and not pd.isna(d) else "")
+        dfn["Fuentes"] = [f"{n.get('fuentes', 1)} · " + ", ".join(n.get("lista_fuentes") or [])[:60] for n in dfn.to_dict("records")]
         st.caption(f"{len(dfn)} de {len(noticias)} noticias de los últimos {round(cfg['noticias'].get('max_horas', 72) / 24)} días. "
-                   "Proveedor = la noticia menciona a tu proveedor directo.")
-        st.dataframe(dfn[["Nivel", "riesgo", "Región", "Proveedor", "certeza", "Tema", "titulo", "fuente", "Fecha", "url"]],
+                   "Proveedor = la noticia menciona a tu proveedor directo. *Publicada* = primera publicación conocida "
+                   "(hora Colombia). Abre **ver** para confirmar en el medio original.")
+        st.dataframe(dfn[["Nivel", "riesgo", "Región", "Proveedor", "certeza", "Fuentes", "Tema", "titulo", "Publicada", "url"]],
                      hide_index=True, width="stretch",
                      column_config={"riesgo": st.column_config.ProgressColumn("Riesgo", min_value=0, max_value=10, format="%d/10"),
                                     "certeza": "Certeza", "titulo": st.column_config.TextColumn("Título", width="large"),

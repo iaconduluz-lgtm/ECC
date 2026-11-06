@@ -161,6 +161,8 @@ def parse_rss(xml_text):
         titulo = (item.findtext("title") or "").strip()
         url = (item.findtext("link") or "").strip()
         fuente = (item.findtext("source") or "").strip()
+        if fuente and titulo.endswith(" - " + fuente):  # Google News añade " - Medio" al final del título
+            titulo = titulo[: -len(" - " + fuente)].strip()
         try:
             fecha = parsedate_to_datetime(item.findtext("pubDate"))
         except (TypeError, ValueError):
@@ -176,6 +178,8 @@ def parse_gdelt(payload):
             fecha = datetime.strptime(a.get("seendate", ""), "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
         except ValueError:
             fecha = None
+        # Ojo: seendate es cuando GDELT VIO la noticia, no cuando se publicó (un artículo viejo
+        # actualizado puede aparecer como nuevo). Por eso filtrar() revisa también la fecha del enlace.
         items.append({"titulo": a.get("title", ""), "url": a.get("url", ""),
                       "fuente": a.get("domain", ""), "fecha": fecha, "origen": "GDELT"})
     return items
@@ -196,24 +200,87 @@ def _buscar_gdelt(q):
     return parse_gdelt(red.get(GDELT, params=params).json())
 
 
+FECHA_EN_URL = [re.compile(r"/(20\d{2})[/-](\d{1,2})[/-](\d{1,2})(?:/|-|$)"),
+                re.compile(r"[/_-](20\d{2})(\d{2})(\d{2})(?:[/_.-]|$)")]
+VACIAS = {"para", "por", "con", "los", "las", "del", "que", "una", "sus", "tras", "the", "and", "for", "from", "with",
+          "como", "mas", "ante", "sobre", "entre", "este", "esta", "cobre", "copper"}
+
+
+def fecha_en_url(url):
+    """Fecha de publicación escrita en el enlace (p. ej. /2026/09/15/ o -20260915-), si la hay."""
+    for patron in FECHA_EN_URL:
+        m = patron.search(url or "")
+        if m:
+            try:
+                return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)), tzinfo=timezone.utc)
+            except ValueError:
+                continue
+    return None
+
+
+def _palabras(titulo):
+    return {w for w in re.findall(r"[a-z0-9]+", normalizar(titulo)) if len(w) >= 4 and w not in VACIAS}
+
+
+def _misma_noticia(a, b):
+    """Dos titulares cuentan la misma noticia si comparten la mayoría de sus palabras importantes."""
+    if not a or not b:
+        return False
+    return len(a & b) / min(len(a), len(b)) >= 0.6
+
+
 def filtrar(items, max_horas, ahora=None, proveedor=()):
-    """Deduplica, descarta noticias viejas, calcula puntaje y ordena por riesgo."""
+    """Descarta noticias viejas o sin fecha, agrupa la misma noticia de distintos medios, puntúa y ordena.
+
+    - Fecha: la del enlace si existe (la de GDELT es de cuando la vio, no de cuando se publicó); si no, la del feed.
+      Sin fecha confiable, la noticia se descarta.
+    - Confirmación: con una sola fuente el riesgo queda como máximo en Alto ("Sin confirmar");
+      Peligro exige al menos 2 medios distintos.
+    """
     ahora = ahora or datetime.now(timezone.utc)
     limite = ahora - timedelta(hours=max_horas)
-    vistos, out = set(), []
+    grupos = []  # cada grupo = la misma noticia en varios medios
+    vistos = set()
     for it in items:
         nid = _id(it["url"], it["titulo"])
-        clave_titulo = normalizar(it["titulo"])[:80]
-        if nid in vistos or clave_titulo in vistos:
+        if nid in vistos:
             continue
-        vistos.update({nid, clave_titulo})
-        if it["fecha"] and it["fecha"] < limite:
+        vistos.add(nid)
+        f_url = fecha_en_url(it["url"])
+        fecha = f_url or it["fecha"]
+        if fecha is None or fecha < limite or (f_url and f_url < limite):
+            continue
+        if fecha > ahora + timedelta(hours=6):  # fechas en el futuro: dato malo
             continue
         e = evaluar(it["titulo"], proveedor)
         if e["riesgo"] == 0:
             continue
-        out.append({**it, "id": nid, **e})
-    out.sort(key=lambda x: (x["afecta_proveedor"] and x["riesgo"] >= 4, x["riesgo"]), reverse=True)
+        nueva = {**it, "id": nid, **e, "fecha": fecha, "fecha_desde_url": bool(f_url)}
+        pal = _palabras(it["titulo"])
+        grupo = next((g for g in grupos if _misma_noticia(pal, g["palabras"])), None)
+        if grupo:
+            grupo["miembros"].append(nueva)
+            grupo["palabras"] |= pal
+        else:
+            grupos.append({"palabras": pal, "miembros": [nueva]})
+
+    out = []
+    for g in grupos:
+        m = g["miembros"]
+        principal = max(m, key=lambda x: x["riesgo"])
+        fuentes = sorted({(x.get("fuente") or x.get("origen") or "").strip() for x in m} - {""})
+        n = max(1, len(fuentes))
+        item = {**principal, "fuentes": n, "lista_fuentes": fuentes,
+                "fecha": min(x["fecha"] for x in m)}  # la primera publicación conocida
+        if n < 2 and item["riesgo"] >= 8:
+            item["riesgo"] = 7
+            item["nivel"] = nivel(7)
+        if n < 2 and item["riesgo"] >= 4 and item.get("certeza") not in ("Buena noticia", ""):
+            item["certeza"] = f"{item['certeza']} · sin confirmar"
+        elif n >= 2 and item.get("certeza"):
+            item["certeza"] = f"{item['certeza']} · {n} fuentes"
+        out.append(item)
+    out.sort(key=lambda x: (x["afecta_proveedor"] and x["riesgo"] >= 4, x["riesgo"], x["fuentes"]), reverse=True)
     return out
 
 
