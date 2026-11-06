@@ -71,7 +71,8 @@ def _hay(termino, texto):
 
 NIVELES = [(8, "Peligro"), (6, "Alto"), (4, "Medio"), (1, "Bajo")]
 ICONO = {"Peligro": "🔴", "Alto": "🟠", "Medio": "🟡", "Bajo": "🟢"}
-POSITIVAS = ("produccion record", "record production", "rates to fall", "rates fall", "rates drop", "rates decline",
+POSITIVAS = ("produccion record", "record production", "reabren", "reabre", "reapertura", "habilitan el paso",
+             "habilitan la via", "restablecen", "se normaliza", "reopen", "reopens", "lifted", "rates to fall", "rates fall", "rates drop", "rates decline",
              "rates ease", "fletes bajan", "bajan los fletes", "caen los fletes", "reanuda", "resume", "acuerdo", "levantan", "levanta el", "agreement", "normaliza", "restablece")
 POSIBLE = ("amenaza", "amenazan", "anuncia", "anuncian", "podria", "posible", "evalua", "evaluan", "convocan",
            "plantea", "propone", "threaten", "could", "may ", "plans to", "warns")
@@ -218,6 +219,68 @@ VACIAS = {"para", "por", "con", "los", "las", "del", "que", "una", "sus", "tras"
           "como", "mas", "ante", "sobre", "entre", "este", "esta", "cobre", "copper"}
 
 
+# ---- Fecha publicada en la propia página de la noticia ----
+_CACHE_FECHAS = {}  # url -> datetime | None (una consulta por enlace mientras la app esté encendida)
+PATRONES_FECHA_PAGINA = [
+    r'<meta[^>]+(?:property|name|itemprop)=["\'](?:article:published_time|og:published_time|datePublished|'
+    r'pubdate|publishdate|publish-date|date|dc\.date|DC\.date\.issued|parsely-pub-date|sailthru\.date)["\'][^>]*'
+    r'content=["\']([^"\']+)["\']',
+    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]*(?:property|name|itemprop)=["\'](?:article:published_time|datePublished)["\']',
+    r'"datePublished"\s*:\s*"([^"]+)"',
+    r'<time[^>]+datetime=["\']([^"\']+)["\']',
+]
+
+
+def _leer_fecha(texto):
+    texto = texto.strip()
+    for intento in (texto, texto.replace("Z", "+00:00"), texto[:19], texto[:10]):
+        try:
+            d = datetime.fromisoformat(intento)
+            return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def fecha_en_pagina(html):
+    """Fecha de publicación que el medio declara en la página (metadatos para buscadores)."""
+    for patron in PATRONES_FECHA_PAGINA:
+        for m in re.finditer(patron, html or "", re.I):
+            d = _leer_fecha(m.group(1))
+            if d and d.year >= 2000:
+                return d
+    return None
+
+
+def verificar_fechas(items, minimo_riesgo=4, maximo=40, proveedor=()):
+    """Abre la página de las noticias relevantes con enlace directo y anota `fecha_pagina` si el medio la declara.
+
+    Los enlaces de Google News vienen cifrados y no se pueden abrir así; esos quedan con la fecha del buscador.
+    """
+    candidatos = []
+    for it in items:
+        url = it.get("url") or ""
+        if not url.startswith("http") or "news.google.com" in url or fecha_en_url(url):
+            continue
+        if evaluar(it["titulo"], proveedor, it.get("resumen", ""))["riesgo"] < minimo_riesgo:
+            continue
+        candidatos.append(it)
+    pendientes = list({it["url"] for it in candidatos if it["url"] not in _CACHE_FECHAS})[:maximo]
+
+    def leer(url):
+        try:
+            return url, fecha_en_pagina(red.get(url, headers={"User-Agent": "Mozilla/5.0 (monitor-cobre)"}, intentos=1).text[:300000])
+        except Exception:
+            return url, None
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for url, fecha in ex.map(leer, pendientes):
+            _CACHE_FECHAS[url] = fecha
+    for it in candidatos:
+        it["fecha_pagina"] = _CACHE_FECHAS.get(it["url"])
+    return items
+
+
 def fecha_en_url(url):
     """Fecha de publicación escrita en el enlace (p. ej. /2026/09/15/ o -20260915-), si la hay."""
     for patron in FECHA_EN_URL:
@@ -267,15 +330,18 @@ def filtrar(items, max_horas, ahora=None, proveedor=()):
             continue
         vistos.add(nid)
         f_url = fecha_en_url(it["url"])
-        fecha = f_url or it["fecha"]
-        if fecha is None or fecha < limite or (f_url and f_url < limite):
+        f_pag = it.get("fecha_pagina")
+        confiable = f_url or f_pag  # fecha declarada por el medio (enlace o página): manda sobre la del buscador
+        fecha = confiable or it["fecha"]
+        if fecha is None or fecha < limite:
             continue
         if fecha > ahora + timedelta(hours=6):  # fechas en el futuro: dato malo
             continue
         e = evaluar(it["titulo"], proveedor, it.get("resumen", ""))
         if e["riesgo"] == 0:
             continue
-        nueva = {**it, "id": nid, **e, "fecha": fecha, "fecha_desde_url": bool(f_url)}
+        nueva = {**it, "id": nid, **e, "fecha": fecha, "fecha_desde_url": bool(f_url),
+                 "fecha_verificada": "en el enlace" if f_url else ("en la página" if f_pag else "según el buscador")}
         pal = _palabras(it["titulo"])
         buena = e["certeza"] == "Buena noticia"  # "levantan el bloqueo" no confirma "bloquean"
         grupo = next((g for g in grupos if g["buena"] == buena and _misma_noticia(pal, g["palabras"])), None)
@@ -345,6 +411,8 @@ def obtener(config, errores, estado=None):
             errores.append(f"GDELT: {error}")
         if estado is not None:
             estado.append({"origen": "GDELT", "consulta": q, "noticias": len(encontrados), "error": error})
+    if config.get("verificar_fechas", True):
+        verificar_fechas(items, proveedor=config.get("proveedor_claves", []))
     return filtrar(items, config.get("max_horas", 72), proveedor=config.get("proveedor_claves", []))
 
 

@@ -548,7 +548,9 @@ with t_not:
             "Las noticias del **resto del mundo** llegan como máximo a **Alto**: mueven el precio, pero no cortan tu suministro.\n\n"
             "**Confirmación y fechas:** una noticia publicada por **un solo medio** llega como máximo a **Alto** y se "
             "marca *sin confirmar*; **Peligro** exige al menos **2 medios distintos**. Se descartan las noticias sin "
-            "fecha y las viejas: si el enlace trae su fecha (p. ej. `/2026/09/12/`), se usa esa y no la del buscador.")
+            "fecha y las viejas. La fecha que manda es la que declara el propio medio: en el enlace (p. ej. "
+            "`/2026/09/12/`) o dentro de la página de la noticia (se abre una vez para las de nivel Medio o más). "
+            "Si no se puede verificar, se usa la del buscador y la columna *Fecha según* lo indica.")
 
     st.subheader("Análisis automático de noticias")
     grupos = analisis.resumen_noticias(noticias)
@@ -624,13 +626,16 @@ with t_not:
             dfn = dfn.sort_values("fecha", ascending=False, na_position="last")
         dfn["Publicada"] = dfn["fecha"].map(lambda d: d.astimezone(ZoneInfo("America/Bogota")).strftime("%d/%m/%Y %H:%M")
                                             if d is not None and not pd.isna(d) else "")
+        dfn["Fecha según"] = dfn["fecha_verificada"].map(
+            {"en el enlace": "✓ enlace del medio", "en la página": "✓ página del medio", "según el buscador": "buscador (sin verificar)"}
+        ) if "fecha_verificada" in dfn else ""
         dfn["Fuentes"] = [f"{n.get('fuentes', 1)} · " + ", ".join(n.get("lista_fuentes") or [])[:60]
                           + (" · medio poco útil" if n.get("medio_poco_util") else "") for n in dfn.to_dict("records")]
         st.caption(f"{len(dfn)} de {len(noticias)} noticias de los últimos {round(cfg['noticias'].get('max_horas', 72) / 24)} días. "
                    "Selecciona una o varias filas (casilla a la izquierda) y marca si te sirven. *Publicada* = primera "
                    "publicación conocida (hora Colombia). Abre **ver** para confirmar en el medio original.")
         evento = st.dataframe(
-            dfn[["Nivel", "Seguimiento", "riesgo", "Región", "Proveedor", "certeza", "Fuentes", "Tema", "titulo", "Publicada", "url"]],
+            dfn[["Nivel", "Seguimiento", "riesgo", "Región", "Proveedor", "certeza", "Fuentes", "Tema", "titulo", "Publicada", "Fecha según", "url"]],
             hide_index=True, width="stretch", on_select="rerun", selection_mode="multi-row", key="tabla_noticias",
             column_config={"riesgo": st.column_config.ProgressColumn("Riesgo", min_value=0, max_value=10, format="%d/10"),
                            "certeza": "Certeza", "titulo": st.column_config.TextColumn("Título", width="large"),

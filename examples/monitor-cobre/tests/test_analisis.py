@@ -218,6 +218,62 @@ class TestFechasYConfirmacion(unittest.TestCase):
             self.item("Bloqueo en Las Bambas paraliza envíos de cobre hoy", "https://a.pe/2", "Medio A")])
         self.assertEqual((out[0]["nivel"], out[0]["fuentes"]), ("Alto", 1))
 
+    def test_fecha_en_pagina_formatos(self):
+        from monitor import noticias
+        casos = {
+            '<meta property="article:published_time" content="2026-09-10T08:15:00-05:00" />': (2026, 9, 10),
+            '<meta content="2026-09-11T10:00:00Z" property="article:published_time">': (2026, 9, 11),
+            '<script type="application/ld+json">{"@type":"NewsArticle","datePublished":"2026-09-12T07:00:00+00:00"}</script>': (2026, 9, 12),
+            '<meta itemprop="datePublished" content="2026-09-13">': (2026, 9, 13),
+            '<p>Publicado <time datetime="2026-09-14T09:00:00">14 sep</time></p>': (2026, 9, 14),
+        }
+        for html, esperado in casos.items():
+            d = noticias.fecha_en_pagina("<html><head>" + html + "</head></html>")
+            self.assertEqual((d.year, d.month, d.day), esperado, html)
+        self.assertIsNone(noticias.fecha_en_pagina("<html><p>sin fecha</p></html>"))
+
+    def test_caso_occidente_noticia_vieja_reaparece(self):
+        # El caso real: enlace sin fecha, GDELT dice "visto hoy", pero la página dice 10 de septiembre.
+        from unittest import mock
+        from monitor import noticias
+        noticias._CACHE_FECHAS.clear()
+        url = "https://occidente.co/regionales/valle-del-cauca/protesta-de-camioneros-en-buenaventura-bloquean-via/"
+        item = {"titulo": "Protesta de camioneros en Buenaventura bloquean vía al puerto", "url": url,
+                "fuente": "occidente.co", "origen": "GDELT", "fecha": self.AHORA - timedelta(hours=2)}
+        pagina = mock.Mock(text='<meta property="article:published_time" content="2026-09-10T08:15:00-05:00">')
+        with mock.patch("monitor.red.get", return_value=pagina) as g:
+            noticias.verificar_fechas([item])
+            noticias.verificar_fechas([dict(item)])  # segunda vez: no vuelve a descargar la página
+        self.assertEqual(g.call_count, 1)
+        self.assertEqual(item["fecha_pagina"].month, 9)
+        self.assertEqual(self.filtrar([item]), [])  # descartada por vieja
+
+    def test_pagina_reciente_se_conserva_y_dice_de_donde_sale_la_fecha(self):
+        from unittest import mock
+        from monitor import noticias
+        noticias._CACHE_FECHAS.clear()
+        item = self.item("Bloqueo en la vía al puerto de Buenaventura", "https://medio.co/bloqueo-via-puerto", "Medio A")
+        pagina = mock.Mock(text='<meta property="article:published_time" content="2026-11-06T10:00:00-05:00">')
+        with mock.patch("monitor.red.get", return_value=pagina):
+            noticias.verificar_fechas([item])
+        out = self.filtrar([item])
+        self.assertEqual(out[0]["fecha_verificada"], "en la página")
+
+    def test_no_abre_enlaces_de_google_ni_noticias_irrelevantes(self):
+        from unittest import mock
+        from monitor import noticias
+        noticias._CACHE_FECHAS.clear()
+        items = [self.item("Bloqueo en Buenaventura", "https://news.google.com/rss/articles/CBMi", "A"),
+                 self.item("Receta de ceviche peruano", "https://cocina.pe/ceviche", "B")]
+        with mock.patch("monitor.red.get") as g:
+            noticias.verificar_fechas(items)
+        g.assert_not_called()
+
+    def test_reabren_es_buena_noticia(self):
+        from monitor import noticias
+        e = noticias.evaluar("Protesta de camioneros en Buenaventura: bloquean y reabren vía al puerto", [])
+        self.assertEqual((e["certeza"], e["nivel"]), ("Buena noticia", "Bajo"))
+
     def test_quita_el_nombre_del_medio_del_titulo(self):
         from monitor import noticias
         xml = ("<rss><channel><item><title>Bloqueo en Las Bambas - El Comercio</title><link>u</link>"

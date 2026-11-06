@@ -53,6 +53,7 @@ alertas:
 
 noticias:
   max_horas: 72          # noticias de los últimos 3 días
+  verificar_fechas: true # abre la página de las noticias de nivel Medio o más para leer su fecha real de publicación
   # Nombres de tu proveedor directo: cualquier noticia que lo mencione sube de nivel.
   proveedor_claves:
     - "Elcope"
